@@ -1,7 +1,6 @@
 package com.github.tunashred.moderator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tunashred.dtos.MessageInfo;
 import com.github.tunashred.privatedtos.ProcessedMessage;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -43,13 +42,12 @@ public class ModeratorProducerConsumer {
         KafkaProducer<String, String> producer = new KafkaProducer<>(producerProps);
 
         Moderator moderator = new Moderator("packs/banned.txt");
-        ObjectMapper objectMapper = new ObjectMapper();
 
         try {
             while (true) {
                 ConsumerRecords<String, String> consumerRecords = consumer.poll(Duration.ofMillis(100));
                 for (ConsumerRecord<String, String> record : consumerRecords) {
-                    MessageInfo messageInfo = objectMapper.readValue(record.value(), MessageInfo.class);
+                    MessageInfo messageInfo = MessageInfo.deserialize(record.value());
 
                     ProcessedMessage processedMessage = moderator.censor(messageInfo);
                     System.out.println("\nGroup chat: " + messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID() +
@@ -57,9 +55,9 @@ public class ModeratorProducerConsumer {
                             "\nOriginal message: " + messageInfo.getMessage() + "\nProcessed message: " + processedMessage.getProcessedMessage());
 
                     if (processedMessage.isCensored()) {
-                        producer.send(new ProducerRecord<>("flagged_messages", record.key(), objectMapper.writeValueAsString(processedMessage)));
+                        producer.send(new ProducerRecord<>("flagged_messages", record.key(), ProcessedMessage.serialize(processedMessage)));
                     }
-                    String toDeliverMessageInfo = objectMapper.writeValueAsString(new MessageInfo(processedMessage.getMessageInfo().getGroupChat(), processedMessage.getMessageInfo().getUser(), processedMessage.getProcessedMessage()));
+                    String toDeliverMessageInfo = MessageInfo.serialize(new MessageInfo(processedMessage.getMessageInfo().getGroupChat(), processedMessage.getMessageInfo().getUser(), processedMessage.getProcessedMessage()));
                     producer.send(new ProducerRecord<>("safe_chat", record.key(), toDeliverMessageInfo));
                     consumer.commitSync();
                 }
