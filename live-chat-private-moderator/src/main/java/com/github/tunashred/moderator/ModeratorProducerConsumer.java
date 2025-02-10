@@ -57,10 +57,10 @@ public class ModeratorProducerConsumer {
                             "\nOriginal message: " + messageInfo.getMessage() + "\nProcessed message: " + processedMessage.getProcessedMessage());
 
                     if (processedMessage.isCensored()) {
-                        producer.send(new ProducerRecord<>("flagged_messages", record.key(), record.value()));
+                        producer.send(new ProducerRecord<>("flagged_messages", record.key(), objectMapper.writeValueAsString(processedMessage)));
                     }
-                    // here should send the thing serialized
-                    producer.send(new ProducerRecord<>("safe_chat", record.key(), processedMessage.getProcessedMessage()));
+                    String toDeliverMessageInfo = objectMapper.writeValueAsString(new MessageInfo(processedMessage.getMessageInfo().getGroupChat(), processedMessage.getMessageInfo().getUser(), processedMessage.getProcessedMessage()));
+                    producer.send(new ProducerRecord<>("safe_chat", record.key(), toDeliverMessageInfo));
                     consumer.commitSync();
                 }
             }
