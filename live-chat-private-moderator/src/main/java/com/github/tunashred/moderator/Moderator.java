@@ -1,7 +1,7 @@
 package com.github.tunashred.moderator;
 
 import com.github.tunashred.dtos.MessageInfo;
-import com.github.tunashred.dtos.ProcessedMessage;
+import com.github.tunashred.privatedtos.ProcessedMessage;
 import org.ahocorasick.trie.Emit;
 import org.ahocorasick.trie.Trie;
 

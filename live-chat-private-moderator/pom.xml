@@ -45,7 +45,7 @@
     <dependencies>
         <dependency>
             <groupId>com.github.tunashred</groupId>
-            <artifactId>live-chat-public-dtos</artifactId>
+            <artifactId>live-chat-dtos</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
 
