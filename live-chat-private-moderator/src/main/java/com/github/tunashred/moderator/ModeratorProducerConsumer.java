@@ -3,70 +3,76 @@ package com.github.tunashred.moderator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.MessageInfo;
 import com.github.tunashred.privatedtos.ProcessedMessage;
-import org.apache.kafka.clients.consumer.Consumer;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.kstream.KStream;
 
-import java.time.Duration;
-import java.util.Collections;
 import java.util.Properties;
 
-import static org.apache.kafka.clients.consumer.ConsumerConfig.*;
 import static org.apache.kafka.clients.producer.ProducerConfig.BOOTSTRAP_SERVERS_CONFIG;
-import static org.apache.kafka.clients.producer.ProducerConfig.*;
+import static org.apache.kafka.streams.StreamsConfig.*;
 
 public class ModeratorProducerConsumer {
     public static void main(String[] args) {
-        Properties consumerProps = new Properties();
-        consumerProps.put(BOOTSTRAP_SERVERS_CONFIG, "localhost:9092,localhost:9093,localhost:9094");
-        consumerProps.put(GROUP_ID_CONFIG, "moderator-consumer-group");
-        consumerProps.put(KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        consumerProps.put(VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        consumerProps.put(ENABLE_AUTO_COMMIT_CONFIG, "false");
-        consumerProps.put(AUTO_OFFSET_RESET_CONFIG, "earliest");
-        consumerProps.put("acks", "all");
+        Properties streamsProps = new Properties();
+        streamsProps.put(BOOTSTRAP_SERVERS_CONFIG, "localhost:9092,localhost:9093,localhost:9094");
+        streamsProps.put(APPLICATION_ID_CONFIG, "moderator-application");
+        streamsProps.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
+        streamsProps.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass().getName());
 
-        Properties producerProps = new Properties();
-        producerProps.put(BOOTSTRAP_SERVERS_CONFIG, "localhost:9092,localhost:9093,localhost:9094");
-        producerProps.put(KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-        producerProps.put(VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
-
-        Consumer<String, String> consumer = new KafkaConsumer<>(consumerProps);
-        consumer.subscribe(Collections.singletonList("unsafe_chat"));
-
-        KafkaProducer<String, String> producer = new KafkaProducer<>(producerProps);
+        StreamsBuilder builder = new StreamsBuilder();
+        KStream<String, String> inputStream = builder.stream("unsafe_chat");
 
         Moderator moderator = new Moderator("packs/banned.txt");
 
-        try {
-            while (true) {
-                ConsumerRecords<String, String> consumerRecords = consumer.poll(Duration.ofMillis(100));
-                for (ConsumerRecord<String, String> record : consumerRecords) {
-                    MessageInfo messageInfo = MessageInfo.deserialize(record.value());
+        KStream<String, ProcessedMessage> processedStream = inputStream
+                .map(((key, value) -> {
+                    try {
+                        MessageInfo messageInfo = MessageInfo.deserialize(value);
+                        ProcessedMessage processedMessage = moderator.censor(messageInfo);
+                        System.out.println("\nGroup chat: " + messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID() +
+                                "\nmessage.User: " + messageInfo.getUser().getName() + "/" + messageInfo.getUser().getUserID() +
+                                "\nOriginal message: " + messageInfo.getMessage() + "\nProcessed message: " + processedMessage.getProcessedMessage());
 
-                    ProcessedMessage processedMessage = moderator.censor(messageInfo);
-                    System.out.println("\nGroup chat: " + messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID() +
-                            "\nmessage.User: " + messageInfo.getUser().getName() + "/" + messageInfo.getUser().getUserID() +
-                            "\nOriginal message: " + messageInfo.getMessage() + "\nProcessed message: " + processedMessage.getProcessedMessage());
-
-                    if (processedMessage.isCensored()) {
-                        producer.send(new ProducerRecord<>("flagged_messages", record.key(), ProcessedMessage.serialize(processedMessage)));
+                        return KeyValue.pair(key, processedMessage);
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException(e);
                     }
-                    String toDeliverMessageInfo = MessageInfo.serialize(new MessageInfo(processedMessage.getMessageInfo().getGroupChat(), processedMessage.getMessageInfo().getUser(), processedMessage.getProcessedMessage()));
-                    producer.send(new ProducerRecord<>("safe_chat", record.key(), toDeliverMessageInfo));
-                    consumer.commitSync();
-                }
-            }
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
-        } finally {
-            consumer.close();
-            producer.close();
-        }
+                }));
+
+        processedStream
+                .map((key, processedMessage) -> {
+                    try {
+                        return KeyValue.pair(key, MessageInfo.serialize(
+                                        new MessageInfo(processedMessage.getMessageInfo().getGroupChat(),
+                                                processedMessage.getMessageInfo().getUser(),
+                                                processedMessage.getProcessedMessage())
+                                )
+                        );
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).to("safe_chat");
+
+        processedStream
+                .filter((key, processedMessage) -> processedMessage.isCensored())
+                .map((key, processedMessage) -> {
+                    try {
+                        return KeyValue.pair(key, ProcessedMessage.serialize(processedMessage));
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .to("flagged_messages");
+
+        final Topology topology = builder.build();
+        KafkaStreams streams = new KafkaStreams(topology, streamsProps);
+        streams.start();
+        System.out.println(topology.describe());
+
+        Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
     }
 }
