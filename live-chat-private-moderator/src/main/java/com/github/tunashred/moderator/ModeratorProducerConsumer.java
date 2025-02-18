@@ -28,6 +28,7 @@ public class ModeratorProducerConsumer {
 
         Moderator moderator = new Moderator("packs/banned.txt");
 
+        // consume records
         KStream<String, ProcessedMessage> processedStream = inputStream
                 .map(((key, value) -> {
                     try {
@@ -39,10 +40,12 @@ public class ModeratorProducerConsumer {
 
                         return KeyValue.pair(key, processedMessage);
                     } catch (JsonProcessingException e) {
-                        throw new RuntimeException(e);
+                        e.printStackTrace();
+                        return null;
                     }
                 }));
 
+        // process and send to users
         processedStream
                 .map((key, processedMessage) -> {
                     try {
@@ -53,19 +56,25 @@ public class ModeratorProducerConsumer {
                                 )
                         );
                     } catch (JsonProcessingException e) {
-                        throw new RuntimeException(e);
+                        e.printStackTrace();
+                        return null;
                     }
-                }).to("safe_chat");
+                })
+                .filter((_, processedMessage) -> processedMessage != null)
+                .to("safe_chat");
 
+        // if processed message was flagged, then store for later
         processedStream
                 .filter((key, processedMessage) -> processedMessage.isCensored())
                 .map((key, processedMessage) -> {
                     try {
                         return KeyValue.pair(key, ProcessedMessage.serialize(processedMessage));
                     } catch (JsonProcessingException e) {
-                        throw new RuntimeException(e);
+                        e.printStackTrace();
+                        return null;
                     }
                 })
+                .filter((_, processedMessage) -> processedMessage != null)
                 .to("flagged_messages");
 
         final Topology topology = builder.build();
