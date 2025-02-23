@@ -64,7 +64,14 @@ public class ModeratorProducerConsumer {
                     }
                 })
                 .filter((_, processedMessage) -> processedMessage != null)
-                .to("safe_chat");
+                .to((key, value, recordContext) -> {
+                    try {
+                        MessageInfo messageInfo = MessageInfo.deserialize(value);
+                        return messageInfo.getGroupChat().getChatName();
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
 
         // if processed message was flagged, then store for later
         processedStream
