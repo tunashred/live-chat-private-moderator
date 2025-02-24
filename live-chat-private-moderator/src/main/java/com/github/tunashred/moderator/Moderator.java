@@ -26,6 +26,9 @@ public class Moderator {
         this.bannedWords = trieBuilder.build();
     }
 
+    public Moderator() {
+    }
+
     public static void main(String[] args) {
         Moderator moderator = new Moderator("packs/banned.txt");
         MessageInfo messageInfo = new MessageInfo(null, null, "");
@@ -45,5 +48,9 @@ public class Moderator {
             isCensored = true;
         }
         return new ProcessedMessage(messageInfo, censoredMessage.toString(), isCensored);
+    }
+
+    public void setBannedWords(Trie bannedWords) {
+        this.bannedWords = bannedWords;
     }
 }

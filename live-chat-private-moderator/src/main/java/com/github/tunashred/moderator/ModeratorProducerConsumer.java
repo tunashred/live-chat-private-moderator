@@ -3,15 +3,23 @@ package com.github.tunashred.moderator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.MessageInfo;
 import com.github.tunashred.privatedtos.ProcessedMessage;
+import com.github.tunashred.utils.WordsTrie;
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.StreamsBuilder;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.state.KeyValueStore;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 
 public class ModeratorProducerConsumer {
@@ -29,7 +37,27 @@ public class ModeratorProducerConsumer {
         StreamsBuilder builder = new StreamsBuilder();
         KStream<String, String> inputStream = builder.stream("unsafe_chat");
 
-        Moderator moderator = new Moderator("packs/banned.txt");
+        Moderator moderator = new Moderator();
+        WordsTrie wordsTrie = new WordsTrie();
+        List<String> wordsToAdd = new ArrayList<>();
+        List<String> wordsToRemove = new ArrayList<>();
+
+        KTable<String, String> bannedWordsTable = builder
+                .table("banned-words", Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as("banned-words-store")
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(Serdes.String()));
+
+        bannedWordsTable.toStream().foreach(((key, value) -> {
+            System.out.println(value);
+            if (value == null) {
+                wordsToRemove.add(key);
+            } else {
+                wordsToAdd.add(key);
+            }
+        }));
+
+        wordsTrie.updateBatch(wordsToAdd, wordsToRemove);
+        moderator.setBannedWords(wordsTrie.getTrie());
 
         // consume records
         KStream<String, ProcessedMessage> processedStream = inputStream
