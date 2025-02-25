@@ -27,6 +27,8 @@ public class Moderator {
     }
 
     public Moderator() {
+        // this means messages coming before ktable is loaded, are NOT going to be censored
+        this.bannedWords = Trie.builder().build();
     }
 
     public static void main(String[] args) {

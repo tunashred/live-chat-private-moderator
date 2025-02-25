@@ -15,6 +15,26 @@ public class WordsTrie {
     public WordsTrie() {
     }
 
+    public void addWord(String word) {
+        if (word == null) {
+            return;
+        }
+
+        if (words.add(word)) {
+            rebuild();
+        }
+    }
+
+    public void removeWord(String word) {
+        if (word == null) {
+            return;
+        }
+
+        if (words.remove(word)) {
+            rebuild();
+        }
+    }
+
     public void updateBatch(List<String> wordsToAdd, List<String> wordsToRemove) {
         boolean tainted = false;
 

@@ -6,24 +6,23 @@ import com.github.tunashred.privatedtos.ProcessedMessage;
 import com.github.tunashred.utils.WordsTrie;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.Topology;
+import org.apache.kafka.streams.*;
+import org.apache.kafka.streams.errors.InvalidStateStoreException;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.state.QueryableStoreTypes;
+import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 
 public class ModeratorProducerConsumer {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
@@ -39,8 +38,6 @@ public class ModeratorProducerConsumer {
 
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
-        List<String> wordsToAdd = new ArrayList<>();
-        List<String> wordsToRemove = new ArrayList<>();
 
         KTable<String, String> bannedWordsTable = builder
                 .table("banned-words", Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as("banned-words-store")
@@ -50,14 +47,12 @@ public class ModeratorProducerConsumer {
         bannedWordsTable.toStream().foreach(((key, value) -> {
             System.out.println(value);
             if (value == null) {
-                wordsToRemove.add(key);
+                wordsTrie.removeWord(key);
             } else {
-                wordsToAdd.add(key);
+                wordsTrie.addWord(key);
             }
+            moderator.setBannedWords(wordsTrie.getTrie());
         }));
-
-        wordsTrie.updateBatch(wordsToAdd, wordsToRemove);
-        moderator.setBannedWords(wordsTrie.getTrie());
 
         // consume records
         KStream<String, ProcessedMessage> processedStream = inputStream
@@ -118,6 +113,34 @@ public class ModeratorProducerConsumer {
         final Topology topology = builder.build();
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
         streams.start();
+
+        // so called 'waiting' for ktable to be loaded
+        // but does not do anything and I end up with the banned-words-store being empty
+        ReadOnlyKeyValueStore<String, String> bannedWordsStore = null;
+        while (bannedWordsStore == null) {
+            try {
+                bannedWordsStore = streams.store(StoreQueryParameters.fromNameAndType("banned-words-store", QueryableStoreTypes.keyValueStore()));
+                System.out.println("Store is now available");
+            } catch (InvalidStateStoreException invalidStateStoreException) {
+                try {
+                    System.out.println("Store not ready, retrying...");
+                    Thread.sleep(500);
+                } catch (InterruptedException interruptedException) {
+                    // maybe should be doing something else too ?
+                    interruptedException.printStackTrace();
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        while (true) {
+            try (KeyValueIterator<String, String> iterator = bannedWordsStore.all()) {
+                if (iterator.hasNext()) break; // Exit when at least one record is found
+            }
+            System.out.println("Waiting for banned words store to be populated...");
+            Thread.sleep(500);
+        }
+
         System.out.println(topology.describe());
 
         Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
