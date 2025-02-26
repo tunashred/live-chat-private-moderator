@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.MessageInfo;
 import com.github.tunashred.privatedtos.ProcessedMessage;
 import com.github.tunashred.utils.WordsTrie;
-import org.ahocorasick.trie.Trie;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.*;
