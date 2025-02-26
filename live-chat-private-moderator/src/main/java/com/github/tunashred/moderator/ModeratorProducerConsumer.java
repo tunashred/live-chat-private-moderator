@@ -4,12 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.MessageInfo;
 import com.github.tunashred.privatedtos.ProcessedMessage;
 import com.github.tunashred.utils.WordsTrie;
+import org.ahocorasick.trie.Trie;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.errors.InvalidStateStoreException;
+import org.apache.kafka.streams.kstream.GlobalKTable;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
@@ -39,20 +40,10 @@ public class ModeratorProducerConsumer {
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
 
-        KTable<String, String> bannedWordsTable = builder
-                .table("banned-words", Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as("banned-words-store")
+        GlobalKTable<String, String> bannedWordsTable = builder
+                .globalTable("banned-words", Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as("banned-words-store")
                         .withKeySerde(Serdes.String())
                         .withValueSerde(Serdes.String()));
-
-        bannedWordsTable.toStream().foreach(((key, value) -> {
-            System.out.println(value);
-            if (value == null) {
-                wordsTrie.removeWord(key);
-            } else {
-                wordsTrie.addWord(key);
-            }
-            moderator.setBannedWords(wordsTrie.getTrie());
-        }));
 
         // consume records
         KStream<String, ProcessedMessage> processedStream = inputStream
@@ -114,31 +105,41 @@ public class ModeratorProducerConsumer {
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
         streams.start();
 
-        // so called 'waiting' for ktable to be loaded
-        // but does not do anything and I end up with the banned-words-store being empty
-        ReadOnlyKeyValueStore<String, String> bannedWordsStore = null;
-        while (bannedWordsStore == null) {
-            try {
-                bannedWordsStore = streams.store(StoreQueryParameters.fromNameAndType("banned-words-store", QueryableStoreTypes.keyValueStore()));
-                System.out.println("Store is now available");
-            } catch (InvalidStateStoreException invalidStateStoreException) {
-                try {
-                    System.out.println("Store not ready, retrying...");
-                    Thread.sleep(500);
-                } catch (InterruptedException interruptedException) {
-                    // maybe should be doing something else too ?
-                    interruptedException.printStackTrace();
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }
-
         while (true) {
-            try (KeyValueIterator<String, String> iterator = bannedWordsStore.all()) {
-                if (iterator.hasNext()) break; // Exit when at least one record is found
+            try {
+                ReadOnlyKeyValueStore<String, String> store =
+                        streams.store(StoreQueryParameters.fromNameAndType("banned-words-store", QueryableStoreTypes.keyValueStore()));
+
+                // process new words
+                try (KeyValueIterator<String, String> iterator = store.all()) {
+                    while (iterator.hasNext()) {
+                        KeyValue<String, String> entry = iterator.next();
+                        String key = entry.key;
+                        String value = entry.value;
+
+                        System.out.println("Loading banned word: " + key);
+
+                        if (value == null) {
+                            wordsTrie.removeWord(key);
+                        } else {
+                            wordsTrie.addWord(key);
+                        }
+                    }
+                }
+
+                if (wordsTrie.getTrie() == null) {
+                    System.out.println("[ERROR]: Trie is null after loading the words!");
+                    // then do what?
+                }
+
+                moderator.setBannedWords(wordsTrie.getTrie());
+                System.out.println("All banned words loaded successfully");
+                break;
+
+            } catch (InvalidStateStoreException e) {
+                e.printStackTrace();
+                Thread.sleep(100);
             }
-            System.out.println("Waiting for banned words store to be populated...");
-            Thread.sleep(500);
         }
 
         System.out.println(topology.describe());

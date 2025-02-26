@@ -60,5 +60,6 @@ public class WordsTrie {
         for (String word : words) {
             builder.addKeyword(word.trim().toLowerCase());
         }
+        this.trie =  builder.build();
     }
 }
