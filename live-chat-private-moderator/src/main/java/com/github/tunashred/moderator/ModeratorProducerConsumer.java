@@ -129,10 +129,10 @@ public class ModeratorProducerConsumer {
                 if (wordsTrie.getTrie() == null) {
                     System.out.println("[ERROR]: Trie is null after loading the words!");
                     // then do what?
+                } else {
+                    moderator.setBannedWords(wordsTrie.getTrie());
+                    System.out.println("All banned words loaded successfully");
                 }
-
-                moderator.setBannedWords(wordsTrie.getTrie());
-                System.out.println("All banned words loaded successfully");
                 break;
 
             } catch (InvalidStateStoreException e) {
