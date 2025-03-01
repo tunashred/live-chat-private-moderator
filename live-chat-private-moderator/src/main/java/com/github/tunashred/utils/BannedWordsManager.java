@@ -10,7 +10,7 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.Properties;
 
-public class CompactedWordsManager {
+public class BannedWordsManager {
     public static void main(String[] args) throws IOException {
         Properties consumerProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/consumer.properties")) {
@@ -31,7 +31,6 @@ public class CompactedWordsManager {
         BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
         System.out.println("Add compacted topic name:");
         String input = reader.readLine().trim();
-
 
         // since anyone can create topics if they do not exist, I need to make sure this won't happen accidentally
         if ("banned-words".equals(input)) {
@@ -68,7 +67,7 @@ public class CompactedWordsManager {
             // or the record simply does not exist
             ConsumerRecords<String, String> consumerRecords = consumer.poll(Duration.ofMillis(100));
 
-            System.out.println("Word to add to " + topicName + " topic: ");
+            System.out.println("Word to remove to " + topicName + " topic: ");
             input = reader.readLine();
             // also, I could maybe have an option to give a list?
             for (var consumerRecord : consumerRecords) {
@@ -79,7 +78,6 @@ public class CompactedWordsManager {
                     break;
                 }
             }
-
         }
         producer.close();
     }

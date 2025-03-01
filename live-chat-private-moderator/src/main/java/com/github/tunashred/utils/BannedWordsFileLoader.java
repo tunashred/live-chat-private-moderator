@@ -11,11 +11,11 @@ import java.util.Properties;
 
 import static org.apache.kafka.clients.producer.ProducerConfig.*;
 
-public class BannedWordsProducer {
+public class BannedWordsFileLoader {
     private final KafkaProducer<String, String> producer;
     private final String topic;
 
-    public BannedWordsProducer(String topic) {
+    public BannedWordsFileLoader(String topic) {
         this.topic = topic;
         Properties props = new Properties();
         props.put(BOOTSTRAP_SERVERS_CONFIG, "localhost:9092,localhost:9093,localhost:9094");
@@ -27,7 +27,7 @@ public class BannedWordsProducer {
     }
 
     public static void main(String[] args) {
-        BannedWordsProducer producer = new BannedWordsProducer("banned-words");
+        BannedWordsFileLoader producer = new BannedWordsFileLoader("banned-words");
         producer.sendWordsFromFile("packs/banned.txt");
         producer.close();
 
