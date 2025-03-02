@@ -29,6 +29,7 @@ public class ModeratorProducerConsumer {
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
+            streamsProps.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_DOC, 10 * 1024 * 1024L);
         } catch (IOException e) {
             e.printStackTrace();
             // maybe add instead some default properties? but then what is the purpose of using an externalized config
@@ -131,6 +132,9 @@ public class ModeratorProducerConsumer {
         try {
             streams.start();
             System.out.println("Streams application started, waiting for KTable to load...");
+
+            // TODO: rethink this thing
+            // it is pretty bad because the moderator can consume and produce before the ktable is loaded
             if (!initialLoadLatch.await(30, TimeUnit.SECONDS)) {
                 System.out.println("[WARNING] Timed out while waiting for banned words list initialization!");
                 loadStoreManually(streams, wordsTrie, moderator);
