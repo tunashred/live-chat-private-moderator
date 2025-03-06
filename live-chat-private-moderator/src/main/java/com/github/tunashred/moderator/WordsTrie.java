@@ -1,4 +1,4 @@
-package com.github.tunashred.utils;
+package com.github.tunashred.moderator;
 
 import lombok.Getter;
 import org.ahocorasick.trie.Trie;
