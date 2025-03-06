@@ -68,7 +68,7 @@ public class ModeratorProducerConsumer {
             initialLoadLatch.countDown();
         });
 
-        // consume records
+        // consume and process
         KStream<String, ProcessedMessage> processedStream = inputStream
                 .map(((key, value) -> {
                     try {
@@ -85,7 +85,7 @@ public class ModeratorProducerConsumer {
                     }
                 }));
 
-        // process and send to users
+        // produce
         processedStream
                 .map((key, processedMessage) -> {
                     try {
