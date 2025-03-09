@@ -47,11 +47,6 @@ public class BannedWordsManager {
     }
 
     public static void main(String[] args) throws IOException {
-        logger.error("THIS IS A TEST ERROR MESSAGE");
-        logger.warn("THIS IS A TEST WARNING MESSAGE");
-        logger.info("THIS IS A TEST INFO MESSAGE");
-        logger.debug("THIS IS A TEST DEBUG MESSAGE");
-        logger.info("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
         BannedWordsManager manager = new BannedWordsManager();
 
 //        manager.manageTopic();
