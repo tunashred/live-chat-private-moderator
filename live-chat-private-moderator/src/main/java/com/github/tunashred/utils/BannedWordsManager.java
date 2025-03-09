@@ -5,6 +5,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.*;
 import java.time.Duration;
@@ -15,33 +17,58 @@ import java.util.Properties;
 
 // TODO: add more checks for edge cases
 public class BannedWordsManager {
+    private static final Logger logger = LogManager.getLogger(BannedWordsManager.class);
     private static KafkaProducer<String, String> producer = null;
     private static KafkaConsumer<String, String> consumer = null;
-    @Setter private String topic;
+    @Setter
+    private String topic;
 
     public BannedWordsManager() {
-        // TODO: should I move these to a .properties file?
         Properties producerProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/producer.properties")) {
             producerProps.load(propsFile);
         } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e.getMessage());
+            logger.error("Failed to load producer properties file: " + e);
+            // TODO: should I keep this?
+            throw new RuntimeException();
         }
+        // TODO: should I wrap this into a try statement too?
         producer = new KafkaProducer<>(producerProps);
 
         Properties consumerProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/consumer.properties")) {
             consumerProps.load(propsFile);
         } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException(e.getMessage());
+            logger.error("Failed to load producer properties file: " + e);
+            // TODO: should I keep this?
+            throw new RuntimeException();
         }
         consumer = new KafkaConsumer<>(consumerProps);
     }
 
+    public static void main(String[] args) throws IOException {
+        logger.error("THIS IS A TEST ERROR MESSAGE");
+        logger.warn("THIS IS A TEST WARNING MESSAGE");
+        logger.info("THIS IS A TEST INFO MESSAGE");
+        logger.debug("THIS IS A TEST DEBUG MESSAGE");
+        logger.info("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        BannedWordsManager manager = new BannedWordsManager();
+
+//        manager.manageTopic();
+
+        manager.setTopic("banned-words");
+        manager.sendWordsFromFile("packs/banned.txt");
+
+//        manager.saveWordsToFile("packs/banned-words-backup.txt");
+
+        manager.close();
+
+        System.out.println("Job's done");
+    }
+
     public void sendWordsFromFile(String filePath) {
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            logger.info("Starting to send words from file " + filePath + " to topic " + topic);
             String line;
             while ((line = reader.readLine()) != null) {
                 String word = line.trim();
@@ -49,9 +76,11 @@ public class BannedWordsManager {
                     producer.send(new ProducerRecord<>(topic, word, word));
                 }
             }
+            logger.info("Successfully sent words to topic.");
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.error("Failed inside sendWordsFromFile: ", e);
         } finally {
+            // TODO: rethink this print
             System.out.println("Words loaded.");
         }
     }
@@ -62,24 +91,28 @@ public class BannedWordsManager {
             List<String> wordsList = new ArrayList<>();
             consumer.subscribe(Collections.singletonList("banned-words"));
 
+            logger.info("Successfully subscribed to topic" + topic + " and waiting to receive records");
             while (true) {
                 ConsumerRecords<String, String> consumerRecords = consumer.poll(Duration.ofMillis(6000));
                 if (consumerRecords.isEmpty()) {
-                    System.out.println("Done consuming records.");
+                    logger.info("Done consuming records.");
                     break;
                 }
                 for (var record : consumerRecords) {
+                    // TODO: change this to logger?
                     System.out.println("Consumed record key: " + record.key());
                     wordsList.add(record.key());
                 }
             }
             consumer.close();
 
+            logger.info("Started writing words to file.");
             for (String word : wordsList) {
                 writer.write(word);
                 writer.newLine();
             }
         } catch (IOException e) {
+            logger.error("Failed inside saveWordsToFile while trying to save words to file: ", e);
             throw new RuntimeException(e);
         }
     }
@@ -119,9 +152,9 @@ public class BannedWordsManager {
             ProducerRecord<String, String> record = new ProducerRecord<>(topic, word, word);
             producer.send(record, (recordMetadata, e) -> {
                 if (e != null) {
-                    System.out.println("Error while trying to add word: " + e.getMessage());
+                    logger.error("Failed while trying to add word " + word + " to topic " + topic, e);
                 } else {
-                    System.out.println("Word added!");
+                    logger.info("Word added");
                 }
             });
         } else if (option == 2) { // remove word logic
@@ -136,20 +169,5 @@ public class BannedWordsManager {
     public void close() {
         consumer.close();
         producer.close();
-    }
-
-    public static void main(String[] args) throws IOException {
-        BannedWordsManager manager = new BannedWordsManager();
-
-//        manager.manageTopic();
-
-//        manager.setTopic("banned-words");
-//        manager.sendWordsFromFile("packs/banned.txt");
-
-        manager.saveWordsToFile("packs/banned-words-backup.txt");
-
-        manager.close();
-
-        System.out.println("Job's done");
     }
 }
