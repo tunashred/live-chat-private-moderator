@@ -95,7 +95,7 @@ Configuration:
 
     Logger:
       - name: com.github.tunashred.moderator
-        level: "fatal"
+        level: "info"
         additivity: false
         AppenderRef:
           ref: stdout_IDE
@@ -107,6 +107,6 @@ Configuration:
           ref: stdout_IDE
 
       - name: org.apache.kafka
-        level: "info"
+        level: "warn"
         AppenderRef:
           ref: stdout_IDE
