@@ -97,10 +97,16 @@ Configuration:
       - name: com.github.tunashred.moderator
         level: "fatal"
         additivity: false
+        AppenderRef:
+          ref: stdout_IDE
 
-      - name: com.github.tunashred.utils.*
+      - name: com.github.tunashred.utils
         level: "info"
         additivity: false
+        AppenderRef:
+          ref: stdout_IDE
 
       - name: org.apache.kafka
         level: "info"
+        AppenderRef:
+          ref: stdout_IDE
