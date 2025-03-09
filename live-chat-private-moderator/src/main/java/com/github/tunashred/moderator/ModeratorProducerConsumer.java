@@ -15,6 +15,8 @@ import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
 import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -24,27 +26,35 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class ModeratorProducerConsumer {
-    public static void main(String[] args) throws InterruptedException {
+    private static final Logger logger = LogManager.getLogger();
+    private static final String sourceTopic = "unsafe_chat";
+    private static final String bannedWordsTopic = "banned-words";
+    private static final String flaggedTopic = "flagged_messages";
+
+    public static void main(String[] args) {
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
             streamsProps.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_DOC, 10 * 1024 * 1024L);
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.error("Failed to load kafka streams properties file: ", e);
+            // TODO: should I keep this?
             // maybe add instead some default properties? but then what is the purpose of using an externalized config
             // if not for the fewer lines of code in this file?
-            throw new RuntimeException(e.getMessage());
+            throw new RuntimeException();
         }
 
+        logger.info("Initializing KTable and KStream.");
+
         StreamsBuilder builder = new StreamsBuilder();
-        KStream<String, String> inputStream = builder.stream("unsafe_chat");
+        KStream<String, String> inputStream = builder.stream(sourceTopic);
 
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
 
         KTable<String, String> bannedWordsTable = builder
                 .table(
-                        "banned-words",
+                        bannedWordsTopic,
                         Consumed.with(Serdes.String(), Serdes.String())
                                 .withOffsetResetPolicy(Topology.AutoOffsetReset.EARLIEST),
                         Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as("banned-words-store")
@@ -52,7 +62,6 @@ public class ModeratorProducerConsumer {
                                 .withValueSerde(Serdes.String())
                                 .withCachingDisabled()
                 );
-
         final CountDownLatch initialLoadLatch = new CountDownLatch(1);
 
         bannedWordsTable.toStream().foreach((key, value) -> {
@@ -79,7 +88,8 @@ public class ModeratorProducerConsumer {
 
                         return KeyValue.pair(key, processedMessage);
                     } catch (JsonProcessingException e) {
-                        e.printStackTrace();
+                        // TODO: revisit this print
+                        logger.warn("Encountered exception while trying to deserialize record: ", e);
                         return null;
                     }
                 }));
@@ -95,7 +105,7 @@ public class ModeratorProducerConsumer {
                                 )
                         );
                     } catch (JsonProcessingException e) {
-                        e.printStackTrace();
+                        logger.warn("Encountered exception while trying to create new record: ", e);
                         return null;
                     }
                 })
@@ -105,6 +115,8 @@ public class ModeratorProducerConsumer {
                         MessageInfo messageInfo = MessageInfo.deserialize(value);
                         return messageInfo.getGroupChat().getChatName();
                     } catch (JsonProcessingException e) {
+                        logger.error("Failed to fetch topic name for sending record: ", e);
+                        // TODO: should I keep this?
                         throw new RuntimeException(e);
                     }
                 });
@@ -116,12 +128,12 @@ public class ModeratorProducerConsumer {
                     try {
                         return KeyValue.pair(key, ProcessedMessage.serialize(processedMessage));
                     } catch (JsonProcessingException e) {
-                        e.printStackTrace();
+                        logger.warn("Encountered exception while trying to create new record for '" + flaggedTopic + "': ", e);
                         return null;
                     }
                 })
                 .filter((_, processedMessage) -> processedMessage != null)
-                .to("flagged_messages");
+                .to(flaggedTopic);
 
         final Topology topology = builder.build();
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
@@ -129,27 +141,30 @@ public class ModeratorProducerConsumer {
         Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
 
         try {
+            logger.info("Starting moderator streams application");
             streams.start();
-            System.out.println("Streams application started, waiting for KTable to load...");
 
+            int timeout = 30;
+            logger.info("Waiting " + timeout + " seconds for KTable to fetch record from topic '" + bannedWordsTopic + "'");
             // TODO: rethink this thing
             // it is pretty bad because the moderator can consume and produce before the ktable is loaded
-            if (!initialLoadLatch.await(30, TimeUnit.SECONDS)) {
-                System.out.println("[WARNING] Timed out while waiting for banned words list initialization!");
+            if (!initialLoadLatch.await(timeout, TimeUnit.SECONDS)) {
+                logger.warn("Timed out while waiting for banned words list to be loaded");
                 loadStoreManually(streams, wordsTrie, moderator);
             }
-            System.out.println("Moderator ready to process messages.");
+            logger.info("Moderator ready to process messages");
         } catch (InterruptedException e) {
+            logger.warn("Application interrupted: ", e);
             Thread.currentThread().interrupt();
-            System.out.println("[WARNING] Application interrupted");
         }
     }
 
     static private void loadStoreManually(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {
+        final String storeName = bannedWordsTopic + "-store";
         try {
-            System.out.println("Manually loading banned words from store...");
+            System.out.println("Trying to load manually the words into from store");
             ReadOnlyKeyValueStore<String, String> store =
-                    streams.store(StoreQueryParameters.fromNameAndType("banned-words-store", QueryableStoreTypes.keyValueStore()));
+                    streams.store(StoreQueryParameters.fromNameAndType(storeName, QueryableStoreTypes.keyValueStore()));
 
             int count = 0;
             try (KeyValueIterator<String, String> iterator = store.all()) {
@@ -158,7 +173,7 @@ public class ModeratorProducerConsumer {
                     String key = entry.key;
                     String value = entry.value;
 
-                    System.out.println("Manually loading banned word: " + key);
+                    logger.info("Manually added word: " + key);
 
                     if (value == null) {
                         wordsTrie.removeWord(key);
@@ -170,14 +185,13 @@ public class ModeratorProducerConsumer {
             }
 
             if (wordsTrie.getTrie() == null) {
-                System.out.println("[ERROR]: Trie is null after loading the words!");
+                logger.error("Trie is empty after manual load");
             } else {
                 moderator.setBannedWords(wordsTrie.getTrie());
-                System.out.println("All banned words loaded successfully: " + count + " words processed");
+                logger.info("All banned words loaded successfully: " + count + " words processed");
             }
         } catch (InvalidStateStoreException e) {
-            System.err.println("[ERROR] Failed to access store: " + e.getMessage());
-            e.printStackTrace();
+            logger.error("Failed to access store '" + storeName + "': ", e);
         }
     }
 }
