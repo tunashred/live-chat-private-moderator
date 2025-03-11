@@ -58,7 +58,7 @@ public class BannedWordsManager {
 
         manager.close();
 
-        System.out.println("Job's done");
+        logger.info("Job's done");
     }
 
     public void sendWordsFromFile(String filePath) {
@@ -74,9 +74,6 @@ public class BannedWordsManager {
             logger.info("Successfully sent words to topic.");
         } catch (IOException e) {
             logger.error("Failed inside sendWordsFromFile: ", e);
-        } finally {
-            // TODO: rethink this print
-            System.out.println("Words loaded.");
         }
     }
 
@@ -94,9 +91,8 @@ public class BannedWordsManager {
                     break;
                 }
                 for (var record : consumerRecords) {
-                    // TODO: change this to logger?
-                    System.out.println("Consumed record key: " + record.key());
                     wordsList.add(record.key());
+                    logger.info("Consumed record key: " + record.key());
                 }
             }
             consumer.close();

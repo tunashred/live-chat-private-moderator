@@ -65,7 +65,7 @@ public class ModeratorProducerConsumer {
         final CountDownLatch initialLoadLatch = new CountDownLatch(1);
 
         bannedWordsTable.toStream().foreach((key, value) -> {
-            System.out.println("Received update for banned word: key - " + key + ", value - " + value);
+            logger.info("Received update for banned word: key - " + key + ", value - " + value);
             if (value == null) {
                 wordsTrie.removeWord(key);
             } else {
@@ -82,7 +82,7 @@ public class ModeratorProducerConsumer {
                     try {
                         MessageInfo messageInfo = MessageInfo.deserialize(value);
                         ProcessedMessage processedMessage = moderator.censor(messageInfo);
-                        System.out.println("\nGroup chat: " + messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID() +
+                        logger.info("\nGroup chat: " + messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID() +
                                 "\nmessage.User: " + messageInfo.getUser().getName() + "/" + messageInfo.getUser().getUserID() +
                                 "\nOriginal message: " + messageInfo.getMessage() + "\nProcessed message: " + processedMessage.getProcessedMessage());
 
@@ -162,7 +162,7 @@ public class ModeratorProducerConsumer {
     static private void loadStoreManually(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {
         final String storeName = bannedWordsTopic + "-store";
         try {
-            System.out.println("Trying to load manually the words into from store");
+            logger.info("Trying to load manually the words into from store");
             ReadOnlyKeyValueStore<String, String> store =
                     streams.store(StoreQueryParameters.fromNameAndType(storeName, QueryableStoreTypes.keyValueStore()));
 
