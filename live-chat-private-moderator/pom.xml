@@ -23,7 +23,6 @@
 
         <lombok.version>1.18.36</lombok.version>
         <kafka.version>3.7.1</kafka.version>
-        <slf4j.version>2.0.12</slf4j.version>
         <ahocorasick.version>0.6.3</ahocorasick.version>
         <jackson.version>2.16.1</jackson.version>
         <org.apache.logging.log4j.version>2.24.3</org.apache.logging.log4j.version>
@@ -78,18 +77,6 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>${slf4j.version}</version>
         </dependency>
 
         <dependency>
@@ -148,18 +135,6 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
             <version>${org.apache.logging.log4j.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>${org.sl4j.slf4j-api.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.fusesource.jansi</groupId>
-            <artifactId>jansi</artifactId>
-            <version>${org.fusesource.jansi.version}</version>
         </dependency>
 
     </dependencies>
