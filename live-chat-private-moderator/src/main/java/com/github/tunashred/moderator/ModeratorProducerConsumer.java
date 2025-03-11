@@ -26,7 +26,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class ModeratorProducerConsumer {
-    private static final Logger logger = LogManager.getLogger();
+    private static final Logger logger = LogManager.getLogger(ModeratorProducerConsumer.class);
     private static final String sourceTopic = "unsafe_chat";
     private static final String bannedWordsTopic = "banned-words";
     private static final String flaggedTopic = "flagged_messages";

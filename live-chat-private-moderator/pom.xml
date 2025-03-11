@@ -26,7 +26,6 @@
         <slf4j.version>2.0.12</slf4j.version>
         <ahocorasick.version>0.6.3</ahocorasick.version>
         <jackson.version>2.16.1</jackson.version>
-        <commons-configuration2.version>2.10.1</commons-configuration2.version>
         <org.apache.logging.log4j.version>2.24.3</org.apache.logging.log4j.version>
         <org.sl4j.slf4j-api.version>1.7.36</org.sl4j.slf4j-api.version>
         <org.fusesource.jansi.version>2.4.0</org.fusesource.jansi.version>
@@ -122,12 +121,6 @@
             <artifactId>jackson-dataformat-yaml</artifactId>
             <version>${jackson.version}</version>
             <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml -->
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-configuration2</artifactId>
-            <version>${commons-configuration2.version}</version>
         </dependency>
 
         <dependency>
