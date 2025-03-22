@@ -37,7 +37,6 @@ public class ModeratorProducerConsumer {
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
-            streamsProps.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_DOC, 10 * 1024 * 1024L);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
