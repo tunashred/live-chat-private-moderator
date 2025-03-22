@@ -17,10 +17,12 @@ import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.message.MapMessage;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -31,17 +33,13 @@ public class ModeratorProducerConsumer {
     private static final String bannedWordsTopic = "banned-words";
     private static final String flaggedTopic = "flagged_messages";
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws RuntimeException {
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
             streamsProps.put(StreamsConfig.CACHE_MAX_BYTES_BUFFERING_DOC, 10 * 1024 * 1024L);
         } catch (IOException e) {
-            logger.error("Failed to load kafka streams properties file: ", e);
-            // TODO: should I keep this?
-            // maybe add instead some default properties? but then what is the purpose of using an externalized config
-            // if not for the fewer lines of code in this file?
-            throw new RuntimeException();
+            throw new RuntimeException(e);
         }
 
         logger.info("Initializing KTable and KStream.");
@@ -82,13 +80,16 @@ public class ModeratorProducerConsumer {
                     try {
                         MessageInfo messageInfo = MessageInfo.deserialize(value);
                         ProcessedMessage processedMessage = moderator.censor(messageInfo);
-                        logger.info("\nGroup chat: " + messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID() +
-                                "\nmessage.User: " + messageInfo.getUser().getName() + "/" + messageInfo.getUser().getUserID() +
-                                "\nOriginal message: " + messageInfo.getMessage() + "\nProcessed message: " + processedMessage.getProcessedMessage());
+                        logger.trace(() -> new MapMessage<>(Map.of(
+                                "GroupChat", messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID(),
+                                "User", messageInfo.getUser().getName() + "/" + messageInfo.getUser().getUserID(),
+                                "Original message", messageInfo.getMessage(),
+                                "Processed message", processedMessage.getProcessedMessage()
+                        )));
+
 
                         return KeyValue.pair(key, processedMessage);
                     } catch (JsonProcessingException e) {
-                        // TODO: revisit this print
                         logger.warn("Encountered exception while trying to deserialize record: ", e);
                         return null;
                     }
@@ -116,8 +117,8 @@ public class ModeratorProducerConsumer {
                         return messageInfo.getGroupChat().getChatName();
                     } catch (JsonProcessingException e) {
                         logger.error("Failed to fetch topic name for sending record: ", e);
-                        // TODO: should I keep this?
-                        throw new RuntimeException(e);
+                        // TODO: revisit this
+                        return null;
                     }
                 });
 
