@@ -43,11 +43,38 @@ public class ModeratorProducerConsumer {
 
         logger.info("Initializing KTable and KStream.");
 
-        StreamsBuilder builder = new StreamsBuilder();
-        KStream<String, String> inputStream = builder.stream(sourceTopic);
-
+        final CountDownLatch initialLoadLatch = new CountDownLatch(1);
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
+
+        final Topology topology = createTopology(wordsTrie, moderator, initialLoadLatch);
+
+        KafkaStreams streams = new KafkaStreams(topology, streamsProps);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+
+        logger.info("Starting moderator streams application");
+        streams.start();
+
+        int timeout = 30;
+        logger.info("Waiting " + timeout + " seconds for KTable to fetch record from topic '" + bannedWordsTopic + "'");
+        // TODO: rethink this thing
+        // it is pretty bad because the moderator can consume and produce before the ktable is loaded
+        try {
+            if (!initialLoadLatch.await(timeout, TimeUnit.SECONDS)) {
+                logger.warn("Timed out while waiting for banned words list to be loaded");
+                loadStoreManually(streams, wordsTrie, moderator);
+            }
+            logger.info("Moderator ready to process messages");
+        } catch (InterruptedException e) {
+            logger.warn("Application interrupted: ", e);
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    public static Topology createTopology(WordsTrie wordsTrie, Moderator moderator, CountDownLatch initialLoadLatch) {
+        StreamsBuilder builder = new StreamsBuilder();
+        KStream<String, String> inputStream = builder.stream(sourceTopic);
 
         KTable<String, String> bannedWordsTable = builder
                 .table(
@@ -59,7 +86,6 @@ public class ModeratorProducerConsumer {
                                 .withValueSerde(Serdes.String())
                                 .withCachingDisabled()
                 );
-        final CountDownLatch initialLoadLatch = new CountDownLatch(1);
 
         bannedWordsTable.toStream().foreach((key, value) -> {
             logger.info("Received update for banned word: key - " + key + ", value - " + value);
@@ -85,7 +111,6 @@ public class ModeratorProducerConsumer {
                                 "Original message", messageInfo.getMessage(),
                                 "Processed message", processedMessage.getProcessedMessage()
                         )));
-
 
                         return KeyValue.pair(key, processedMessage);
                     } catch (JsonProcessingException e) {
@@ -135,28 +160,7 @@ public class ModeratorProducerConsumer {
                 .filter((_, processedMessage) -> processedMessage != null)
                 .to(flaggedTopic);
 
-        final Topology topology = builder.build();
-        KafkaStreams streams = new KafkaStreams(topology, streamsProps);
-
-        Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
-
-        try {
-            logger.info("Starting moderator streams application");
-            streams.start();
-
-            int timeout = 30;
-            logger.info("Waiting " + timeout + " seconds for KTable to fetch record from topic '" + bannedWordsTopic + "'");
-            // TODO: rethink this thing
-            // it is pretty bad because the moderator can consume and produce before the ktable is loaded
-            if (!initialLoadLatch.await(timeout, TimeUnit.SECONDS)) {
-                logger.warn("Timed out while waiting for banned words list to be loaded");
-                loadStoreManually(streams, wordsTrie, moderator);
-            }
-            logger.info("Moderator ready to process messages");
-        } catch (InterruptedException e) {
-            logger.warn("Application interrupted: ", e);
-            Thread.currentThread().interrupt();
-        }
+        return builder.build();
     }
 
     static private void loadStoreManually(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {
