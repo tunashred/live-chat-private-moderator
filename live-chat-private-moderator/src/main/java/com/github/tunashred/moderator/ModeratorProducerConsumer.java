@@ -47,7 +47,7 @@ public class ModeratorProducerConsumer {
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
 
-        final Topology topology = createTopology(wordsTrie, moderator, initialLoadLatch);
+        final Topology topology = createTopology(sourceTopic, wordsTrie, moderator, initialLoadLatch);
 
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
 
@@ -72,9 +72,10 @@ public class ModeratorProducerConsumer {
         }
     }
 
-    public static Topology createTopology(WordsTrie wordsTrie, Moderator moderator, CountDownLatch initialLoadLatch) {
+    // TODO: maybe for future there will be different banned words topics and multiple flagged messages topics
+    public static Topology createTopology(String inputTopic, WordsTrie wordsTrie, Moderator moderator, CountDownLatch initialLoadLatch) {
         StreamsBuilder builder = new StreamsBuilder();
-        KStream<String, String> inputStream = builder.stream(sourceTopic);
+        KStream<String, String> inputStream = builder.stream(inputTopic);
 
         KTable<String, String> bannedWordsTable = builder
                 .table(
