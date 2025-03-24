@@ -11,6 +11,8 @@ import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.streams.*;
+import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.test.TestRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,8 +22,7 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 
 import static org.apache.kafka.streams.StreamsConfig.*;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class KafkaStreamTest {
     private TopologyTestDriver testDriver;
@@ -58,23 +59,23 @@ public class KafkaStreamTest {
         final String outputTopicName = "group-chat-dummy-1";
         outputTopic = testDriver.createOutputTopic(outputTopicName, new StringDeserializer(), new StringDeserializer());
 
-        MessageInfo dummy_message_1 = new MessageInfo(
+        MessageInfo dummyMessage1 = new MessageInfo(
                 new GroupChat(outputTopicName),
                 new User("user-dummy-1"),
                 "this is a message"
         );
-        String serialized_message_1 = MessageInfo.serialize(dummy_message_1);
+        String serializedMessage1 = MessageInfo.serialize(dummyMessage1);
 
-        MessageInfo dummy_message_2 = new MessageInfo(
+        MessageInfo dummyMessage2 = new MessageInfo(
                 new GroupChat(outputTopicName),
                 new User("user-dummy-2"),
                 "a message this is"
         );
-        String serialized_message_2 = MessageInfo.serialize(dummy_message_2);
+        String serializedMessage2 = MessageInfo.serialize(dummyMessage2);
 
         // produce
-        inputTopic.pipeInput(dummy_message_1.getGroupChat().getChatID(), serialized_message_1);
-        inputTopic.pipeInput(dummy_message_2.getGroupChat().getChatID(), serialized_message_2);
+        inputTopic.pipeInput(dummyMessage1.getGroupChat().getChatID(), serializedMessage1);
+        inputTopic.pipeInput(dummyMessage2.getGroupChat().getChatID(), serializedMessage2);
 
         // consume
         List<KeyValue<String, String>> records = outputTopic.readKeyValuesToList();
@@ -84,7 +85,37 @@ public class KafkaStreamTest {
 
         MessageInfo deserializedFirst = MessageInfo.deserialize(records.get(0).value);
         MessageInfo deserializedSecond = MessageInfo.deserialize(records.get(1).value);
-        assertEquals(dummy_message_1, deserializedFirst);
-        assertEquals(dummy_message_2, deserializedSecond);
+        assertEquals(dummyMessage1, deserializedFirst);
+        assertEquals(dummyMessage2, deserializedSecond);
+    }
+
+    @Test
+    void censorMessage() throws JsonProcessingException {
+        final String outputTopicName = "group-chat-dummy-1";
+        outputTopic = testDriver.createOutputTopic(outputTopicName, new StringDeserializer(), new StringDeserializer());
+
+        // create dummy banned word
+        String dummyBannedWord = "windows";
+        TestInputTopic<String, String> bannedWordsTopic = testDriver.createInputTopic("banned-words", new StringSerializer(), new StringSerializer());
+        bannedWordsTopic.pipeInput(dummyBannedWord, dummyBannedWord, 1000L);
+
+        // produce message
+        MessageInfo dummyMessage = new MessageInfo(
+                new GroupChat(outputTopicName),
+                new User("user-dummy-1"),
+                "this message is about windows. all kinds of windows"
+        );
+        String serializedMessage1 = MessageInfo.serialize(dummyMessage);
+        inputTopic.pipeInput(dummyMessage.getGroupChat().getChatID(), serializedMessage1, 2000L);
+
+        // fetch banned word
+        KeyValueStore<String, String> bannedWordsStore = testDriver.getKeyValueStore("banned-words-store");
+        String bannedWord = bannedWordsStore.get(dummyBannedWord);
+        assertEquals(dummyBannedWord, bannedWord);
+
+        // consume processed message
+        TestRecord<String, String> record = outputTopic.readRecord();
+        MessageInfo processedMessage = MessageInfo.deserialize(record.value());
+        assertNotEquals(processedMessage.getMessage(), dummyMessage.getMessage());
     }
 }
