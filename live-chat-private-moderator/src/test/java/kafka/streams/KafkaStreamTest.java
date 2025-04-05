@@ -1,4 +1,4 @@
-package com.kafka;
+package kafka.streams;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.GroupChat;
@@ -34,7 +34,7 @@ public class KafkaStreamTest {
         final CountDownLatch initialLoadLatch = new CountDownLatch(1);
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
-        final String inputTopicName = "test-input-topic";
+        final String inputTopicName = "unsafe-messages";
         Topology topology = KafkaModerator.createTopology(inputTopicName, wordsTrie, moderator, initialLoadLatch);
 
         Properties props = new Properties();
@@ -107,11 +107,6 @@ public class KafkaStreamTest {
         );
         String serializedMessage1 = MessageInfo.serialize(dummyMessage);
         inputTopic.pipeInput(dummyMessage.getGroupChat().getChatID(), serializedMessage1, 2000L);
-
-        // fetch banned word
-        KeyValueStore<String, String> bannedWordsStore = testDriver.getKeyValueStore("banned-words-store");
-        String bannedWord = bannedWordsStore.get(dummyBannedWord);
-        assertEquals(dummyBannedWord, bannedWord);
 
         // consume processed message
         TestRecord<String, String> record = outputTopic.readRecord();

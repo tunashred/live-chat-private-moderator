@@ -29,7 +29,6 @@ public class BannedWordsManager {
             producerProps.load(propsFile);
         } catch (IOException e) {
             logger.error("Failed to load producer properties file: " + e);
-            // TODO: should I keep this?
             throw new RuntimeException();
         }
         // TODO: should I wrap this into a try statement too?
@@ -40,7 +39,6 @@ public class BannedWordsManager {
             consumerProps.load(propsFile);
         } catch (IOException e) {
             logger.error("Failed to load producer properties file: " + e);
-            // TODO: should I keep this?
             throw new RuntimeException();
         }
         consumer = new KafkaConsumer<>(consumerProps);
