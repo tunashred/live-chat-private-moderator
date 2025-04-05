@@ -1,4 +1,4 @@
-package kafka.whole;
+package kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.GroupChat;
@@ -33,7 +33,7 @@ import static kafka.inputs.Dataset.*;
 import static org.apache.kafka.streams.StreamsConfig.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-public class KafkaWholeTest {
+public class KafkaStreamsTest {
     private TopologyTestDriver testDriver;
     private TestInputTopic<String, String> bannedWordsTopic;
 
