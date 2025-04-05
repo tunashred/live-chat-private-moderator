@@ -13,6 +13,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.apache.kafka.streams.test.TestRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,28 +40,8 @@ public class KafkaWholeTest {
     private TestInputTopic<String, String> inputTopic;
     private TestOutputTopic<String, String> outputTopic;
 
-    static Stream<String> validUsernames() {
-        return Arrays.stream(VALID_USERNAMES);
-    }
-
-    static Stream<String> invalidUsernames() {
-        return Arrays.stream(INVALID_USERNAMES);
-    }
-
-    static Stream<String> validGroupnames() {
-        return Arrays.stream(GROUP_NAMES);
-    }
-
     static Stream<String> bannedWords() {
         return Arrays.stream(BANNED_WORDS);
-    }
-
-    static Stream<String> goodMessages() {
-        return Arrays.stream(GOOD_MESSAGES);
-    }
-
-    static Stream<String> badMessages() {
-        return Arrays.stream(BAD_MESSAGES);
     }
 
     static Stream<Arguments> validClientInfo() {
@@ -182,7 +163,6 @@ public class KafkaWholeTest {
     void sendBadMessages(String groupname, String username, String message) throws JsonProcessingException {
         MessageInfo originalMessage = produceMessage(groupname, username, message);
 
-        // consume
         List<KeyValue<String, String>> records = outputTopic.readKeyValuesToList();
 
         assertEquals(1, records.size());
@@ -197,7 +177,6 @@ public class KafkaWholeTest {
     void sendGoodMessages(String groupname, String username, String message) throws JsonProcessingException {
         MessageInfo originalMessage = produceMessage(groupname, username, message);
 
-        // consume
         List<KeyValue<String, String>> records = outputTopic.readKeyValuesToList();
 
         assertEquals(1, records.size());
@@ -228,6 +207,35 @@ public class KafkaWholeTest {
             serialized = MessageInfo.serialize(messageInfo);
             inputTopic.pipeInput(messageInfo.getGroupChat().getChatID(), serialized);
         }
+
+        List<KeyValue<String, String>> records = outputTopic.readKeyValuesToList();
+
+        assertEquals(size * 2, records.size());
     }
 
+    // produce message, a word from the message gets added to the banned words topic, the same message is produced again
+    @Test
+    void censorWithNewWord() throws JsonProcessingException {
+        outputTopic = testDriver.createOutputTopic(GROUP_NAMES[0], new StringDeserializer(), new StringDeserializer());
+        GroupChat groupChat = new GroupChat(GROUP_NAMES[0]);
+        User user = new User(VALID_USERNAMES[0]);
+
+        String bannedWord = "peste";
+        String message = "spor la cafelutsa cu " + bannedWord;
+        MessageInfo messageInfo = new MessageInfo(groupChat, user, message);
+        String serialized = MessageInfo.serialize(messageInfo);
+
+        inputTopic.pipeInput(groupChat.getChatID(), serialized, 0L);
+
+        TestRecord<String, String> record = outputTopic.readRecord();
+        MessageInfo fetchedMessage = MessageInfo.deserialize(record.value());
+        assertEquals(messageInfo, fetchedMessage);
+
+        bannedWordsTopic.pipeInput(bannedWord, bannedWord, 1000L);
+        inputTopic.pipeInput(groupChat.getChatID(), serialized, 1400L);
+
+        record = outputTopic.readRecord();
+        fetchedMessage = MessageInfo.deserialize(record.value());
+        assertNotEquals(messageInfo, fetchedMessage);
+    }
 }
