@@ -5,7 +5,7 @@ import com.github.tunashred.dtos.GroupChat;
 import com.github.tunashred.dtos.MessageInfo;
 import com.github.tunashred.dtos.User;
 import com.github.tunashred.moderator.Moderator;
-import com.github.tunashred.moderator.ModeratorProducerConsumer;
+import com.github.tunashred.moderator.KafkaModerator;
 import com.github.tunashred.moderator.WordsTrie;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -35,7 +35,7 @@ public class KafkaStreamTest {
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
         final String inputTopicName = "test-input-topic";
-        Topology topology = ModeratorProducerConsumer.createTopology(inputTopicName, wordsTrie, moderator, initialLoadLatch);
+        Topology topology = KafkaModerator.createTopology(inputTopicName, wordsTrie, moderator, initialLoadLatch);
 
         Properties props = new Properties();
         props.put(APPLICATION_ID_CONFIG, "kafka-stream-test");
