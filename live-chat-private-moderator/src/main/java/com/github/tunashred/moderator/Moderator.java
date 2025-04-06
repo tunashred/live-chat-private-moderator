@@ -1,6 +1,6 @@
 package com.github.tunashred.moderator;
 
-import com.github.tunashred.dtos.MessageInfo;
+import com.github.tunashred.dtos.UserMessage;
 import com.github.tunashred.privatedtos.ProcessedMessage;
 import org.ahocorasick.trie.Emit;
 import org.ahocorasick.trie.Trie;
@@ -31,15 +31,8 @@ public class Moderator {
         this.bannedWords = Trie.builder().build();
     }
 
-    public static void main(String[] args) {
-        Moderator moderator = new Moderator("packs/banned.txt");
-        MessageInfo messageInfo = new MessageInfo(null, null, "");
-        ProcessedMessage output = moderator.censor(messageInfo);
-        System.out.println(output.getProcessedMessage());
-    }
-
-    public ProcessedMessage censor(MessageInfo messageInfo) {
-        String message = messageInfo.getMessage();
+    public ProcessedMessage censor(UserMessage userMessage, String channel) {
+        String message = userMessage.getMessage();
         StringBuilder censoredMessage = new StringBuilder(message);
         boolean isCensored = false;
 
@@ -49,7 +42,9 @@ public class Moderator {
             censoredMessage.replace(start, end + 1, replacement);
             isCensored = true;
         }
-        return new ProcessedMessage(messageInfo, censoredMessage.toString(), isCensored);
+
+        UserMessage moderatedUserMessage = new UserMessage(userMessage.getUsername(), censoredMessage.toString());
+        return new ProcessedMessage(channel, moderatedUserMessage, userMessage.getMessage(), isCensored);
     }
 
     public void setBannedWords(Trie bannedWords) {

@@ -1,9 +1,6 @@
 package kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.github.tunashred.dtos.GroupChat;
-import com.github.tunashred.dtos.MessageInfo;
-import com.github.tunashred.dtos.User;
 import com.github.tunashred.moderator.KafkaModerator;
 import com.github.tunashred.moderator.Moderator;
 import com.github.tunashred.moderator.WordsTrie;

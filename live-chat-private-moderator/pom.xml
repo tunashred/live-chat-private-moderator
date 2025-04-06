@@ -33,13 +33,13 @@
         <dependency>
             <groupId>com.github.tunashred</groupId>
             <artifactId>live-chat-dtos</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>2.0-SNAPSHOT</version>
         </dependency>
 
         <dependency>
             <groupId>com.github.tunashred</groupId>
             <artifactId>live-chat-private-dtos</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>2.0-SNAPSHOT</version>
         </dependency>
 
         <dependency>

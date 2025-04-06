@@ -1,7 +1,7 @@
 package com.github.tunashred.moderator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.github.tunashred.dtos.MessageInfo;
+import com.github.tunashred.dtos.UserMessage;
 import com.github.tunashred.privatedtos.ProcessedMessage;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
@@ -56,7 +56,7 @@ public class KafkaModerator {
         logger.info("Starting moderator streams application");
         streams.start();
 
-        int timeout = 30;
+        int timeout = 10;
         logger.info("Waiting " + timeout + " seconds for KTable to fetch record from topic '" + bannedWordsTopic + "'");
         // TODO: rethink this thing
         // it is pretty bad because the moderator can consume and produce before the ktable is loaded
@@ -104,13 +104,13 @@ public class KafkaModerator {
         KStream<String, ProcessedMessage> processedStream = inputStream
                 .map(((key, value) -> {
                     try {
-                        MessageInfo messageInfo = MessageInfo.deserialize(value);
-                        ProcessedMessage processedMessage = moderator.censor(messageInfo);
+                        UserMessage userMessage = UserMessage.deserialize(value);
+                        ProcessedMessage processedMessage = moderator.censor(userMessage, key);
                         logger.trace(() -> new MapMessage<>(Map.of(
-                                "GroupChat", messageInfo.getGroupChat().getChatName() + "/" + messageInfo.getGroupChat().getChatID(),
-                                "User", messageInfo.getUser().getName() + "/" + messageInfo.getUser().getUserID(),
-                                "Original message", messageInfo.getMessage(),
-                                "Processed message", processedMessage.getProcessedMessage()
+                                "GroupChat", key,
+                                "User", userMessage.getUsername(),
+                                "Original message", processedMessage.getOriginalMessage(),
+                                "Processed message", processedMessage.getUserMessage().getMessage()
                         )));
 
                         return KeyValue.pair(key, processedMessage);
@@ -124,12 +124,7 @@ public class KafkaModerator {
         processedStream
                 .map((key, processedMessage) -> {
                     try {
-                        return KeyValue.pair(key, MessageInfo.serialize(
-                                        new MessageInfo(processedMessage.getMessageInfo().getGroupChat(),
-                                                processedMessage.getMessageInfo().getUser(),
-                                                processedMessage.getProcessedMessage())
-                                )
-                        );
+                        return KeyValue.pair(key, UserMessage.serialize(processedMessage.getUserMessage()));
                     } catch (JsonProcessingException e) {
                         logger.warn("Encountered exception while trying to create new record: ", e);
                         return null;
@@ -138,8 +133,8 @@ public class KafkaModerator {
                 .filter((_, processedMessage) -> processedMessage != null)
                 .to((key, value, recordContext) -> {
                     try {
-                        MessageInfo messageInfo = MessageInfo.deserialize(value);
-                        return messageInfo.getGroupChat().getChatName();
+                        UserMessage userMessage = UserMessage.deserialize(value);
+                        return userMessage.getGroupChat().getChatName();
                     } catch (JsonProcessingException e) {
                         logger.error("Failed to fetch topic name for sending record: ", e);
                         // TODO: revisit this
@@ -149,9 +144,10 @@ public class KafkaModerator {
 
         // if processed message was flagged, then store for later
         processedStream
-                .filter((key, processedMessage) -> processedMessage.isCensored())
-                .map((key, processedMessage) -> {
+                .filter((key, processedMessage) -> processedMessage.getIsModerated())
+                .map((_, processedMessage) -> {
                     try {
+                        String key = processedMessage.getChannelName() + processedMessage.getUserMessage().getUsername();
                         return KeyValue.pair(key, ProcessedMessage.serialize(processedMessage));
                     } catch (JsonProcessingException e) {
                         logger.warn("Encountered exception while trying to create new record for '" + flaggedTopic + "': ", e);
