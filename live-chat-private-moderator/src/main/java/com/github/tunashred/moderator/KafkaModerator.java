@@ -121,23 +121,7 @@ public class KafkaModerator {
                     }
                 }));
 
-//        KStream<String, ProcessedMessage> clientStream = processedStream.map((KeyValue::pair));
-//
-//        // get topic name from private DTO
-//        clientStream
-//                .filter((_, processedMessage) -> processedMessage != null)
-//                .to((key, processedMessage, recordContext) -> processedMessage.getChannelName());
-//
-//        // get public DTO and serialize
-//        clientStream.mapValues(processedMessage -> {
-//                    try {
-//                        return UserMessage.serialize(processedMessage.getUserMessage());
-//                    } catch (JsonProcessingException e) {
-//                        return null;
-//                    }
-//                })
-//                .filter((_, serialized) -> serialized != null);
-
+        // produce to client consumer topic
         processedStream
                 .flatMap((key, processedMessage) -> {
                     String topicName = processedMessage.getChannelName();
@@ -150,28 +134,6 @@ public class KafkaModerator {
                     }
                 })
                 .to(((key, value, recordContext) -> key));
-
-//        // produce
-//        processedStream
-//                .map((key, processedMessage) -> {
-//                    try {
-//                        return KeyValue.pair(key, UserMessage.serialize(processedMessage.getUserMessage()));
-//                    } catch (JsonProcessingException e) {
-//                        logger.warn("Encountered exception while trying to create new record: ", e);
-//                        return null;
-//                    }
-//                })
-//                .filter((_, processedMessage) -> processedMessage != null)
-//                .to((key, value, recordContext) -> {
-//                    try {
-//                        UserMessage userMessage = UserMessage.deserialize(value);
-//                        return userMessage.getGroupChat().getChatName();
-//                    } catch (JsonProcessingException e) {
-//                        logger.error("Failed to fetch topic name for sending record: ", e);
-//                        // TODO: revisit this
-//                        return null;
-//                    }
-//                });
 
         // if processed message was flagged, then store for later
         processedStream

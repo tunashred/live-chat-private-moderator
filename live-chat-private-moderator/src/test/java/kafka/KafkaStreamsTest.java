@@ -46,7 +46,7 @@ public class KafkaStreamsTest {
         int size = Math.min(Math.min(VALID_USERNAMES.length, GROUP_NAMES.length), GOOD_MESSAGES.length);
 
         return IntStream.range(0, size)
-                .mapToObj(i -> Arguments.of(GROUP_NAMES[i], VALID_USERNAMES[i], BAD_MESSAGES[i]));
+                .mapToObj(i -> Arguments.of(GROUP_NAMES[i], VALID_USERNAMES[i], GOOD_MESSAGES[i]));
     }
 
     static Stream<Arguments> validClientInfoBadMessages() {
