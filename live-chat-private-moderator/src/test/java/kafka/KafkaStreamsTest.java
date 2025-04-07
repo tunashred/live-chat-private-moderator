@@ -1,6 +1,7 @@
 package kafka;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.github.tunashred.dtos.UserMessage;
 import com.github.tunashred.moderator.KafkaModerator;
 import com.github.tunashred.moderator.Moderator;
 import com.github.tunashred.moderator.WordsTrie;
@@ -45,14 +46,14 @@ public class KafkaStreamsTest {
         int size = Math.min(Math.min(VALID_USERNAMES.length, GROUP_NAMES.length), GOOD_MESSAGES.length);
 
         return IntStream.range(0, size)
-                .mapToObj(i -> Arguments.of(VALID_USERNAMES[i], GROUP_NAMES[i], GOOD_MESSAGES[i]));
+                .mapToObj(i -> Arguments.of(GROUP_NAMES[i], VALID_USERNAMES[i], BAD_MESSAGES[i]));
     }
 
     static Stream<Arguments> validClientInfoBadMessages() {
         int size = Math.min(Math.min(VALID_USERNAMES.length, GROUP_NAMES.length), GOOD_MESSAGES.length);
 
         return IntStream.range(0, size)
-                .mapToObj(i -> Arguments.of(VALID_USERNAMES[i], GROUP_NAMES[i], BAD_MESSAGES[i]));
+                .mapToObj(i -> Arguments.of(GROUP_NAMES[i], VALID_USERNAMES[i], BAD_MESSAGES[i]));
     }
 
     @BeforeEach
@@ -139,70 +140,68 @@ public class KafkaStreamsTest {
         }
     }
 
-    private MessageInfo produceMessage(String groupname, String username, String message) throws JsonProcessingException {
+    private UserMessage produceMessage(String groupname, String username, String message) throws JsonProcessingException {
         outputTopic = testDriver.createOutputTopic(groupname, new StringDeserializer(), new StringDeserializer());
 
-        MessageInfo messageInfo = new MessageInfo(
-                new GroupChat(groupname),
-                new User(username),
-                message
-        );
-        String serialized = MessageInfo.serialize(messageInfo);
+        UserMessage userMessage = new UserMessage(username, message);
+        String serialized = UserMessage.serialize(userMessage);
 
         // produce
-        inputTopic.pipeInput(messageInfo.getGroupChat().getChatID(), serialized);
+        inputTopic.pipeInput(groupname, serialized);
 
-        return messageInfo;
+        return userMessage;
     }
 
     @ParameterizedTest
     @MethodSource("validClientInfoBadMessages")
     void sendBadMessages(String groupname, String username, String message) throws JsonProcessingException {
-        MessageInfo originalMessage = produceMessage(groupname, username, message);
+        UserMessage originalMessage = produceMessage(groupname, username, message);
 
         List<KeyValue<String, String>> records = outputTopic.readKeyValuesToList();
 
         assertEquals(1, records.size());
         assertTrue(outputTopic.isEmpty());
 
-        MessageInfo consumedMessage = MessageInfo.deserialize(records.get(0).value);
+        UserMessage consumedMessage = UserMessage.deserialize(records.get(0).value);
         assertNotEquals(originalMessage, consumedMessage);
     }
 
     @ParameterizedTest
     @MethodSource("validClientInfo")
     void sendGoodMessages(String groupname, String username, String message) throws JsonProcessingException {
-        MessageInfo originalMessage = produceMessage(groupname, username, message);
+        UserMessage originalMessage = produceMessage(groupname, username, message);
 
         List<KeyValue<String, String>> records = outputTopic.readKeyValuesToList();
 
         assertEquals(1, records.size());
         assertTrue(outputTopic.isEmpty());
 
-        MessageInfo consumedMessage = MessageInfo.deserialize(records.get(0).value);
+        UserMessage consumedMessage = UserMessage.deserialize(records.get(0).value);
+        System.out.println(originalMessage.getUsername() + ": " + originalMessage.getMessage());
+        System.out.println(consumedMessage.getUsername() + ": " + consumedMessage.getMessage());
         assertEquals(originalMessage, consumedMessage);
     }
 
     @Test
     void multipleClientsOneGroup() throws JsonProcessingException {
         outputTopic = testDriver.createOutputTopic(GROUP_NAMES[0], new StringDeserializer(), new StringDeserializer());
-        GroupChat groupChat = new GroupChat(GROUP_NAMES[0]);
+        String groupChat = GROUP_NAMES[0];
 
-        User user_a = new User(VALID_USERNAMES[0]);
-        User user_b = new User(VALID_USERNAMES[1]);
-        User users[] = {user_a, user_b};
+        String user_a = VALID_USERNAMES[0];
+        String user_b = VALID_USERNAMES[1];
+        String users[] = {user_a, user_b};
 
         int size = Math.min(GOOD_MESSAGES.length, BAD_MESSAGES.length);
 
         Random random = new Random();
         for (int i = 0; i < size; i++) {
-            MessageInfo messageInfo = new MessageInfo(groupChat, users[random.nextInt(2)], GOOD_MESSAGES[i]);
-            String serialized = MessageInfo.serialize(messageInfo);
-            inputTopic.pipeInput(messageInfo.getGroupChat().getChatID(), serialized);
+            UserMessage userMessage = new UserMessage(users[random.nextInt(2)], GOOD_MESSAGES[i]);
+            String serialized = UserMessage.serialize(userMessage);
+            inputTopic.pipeInput(groupChat, serialized);
 
-            messageInfo = new MessageInfo(groupChat, users[random.nextInt(2)], BAD_MESSAGES[i]);
-            serialized = MessageInfo.serialize(messageInfo);
-            inputTopic.pipeInput(messageInfo.getGroupChat().getChatID(), serialized);
+            userMessage = new UserMessage(users[random.nextInt(2)], BAD_MESSAGES[i]);
+            serialized = UserMessage.serialize(userMessage);
+            inputTopic.pipeInput(groupChat, serialized);
         }
 
         List<KeyValue<String, String>> records = outputTopic.readKeyValuesToList();
@@ -214,25 +213,25 @@ public class KafkaStreamsTest {
     @Test
     void censorWithNewWord() throws JsonProcessingException {
         outputTopic = testDriver.createOutputTopic(GROUP_NAMES[0], new StringDeserializer(), new StringDeserializer());
-        GroupChat groupChat = new GroupChat(GROUP_NAMES[0]);
-        User user = new User(VALID_USERNAMES[0]);
+        String groupChat = GROUP_NAMES[0];
+        String user = VALID_USERNAMES[0];
 
         String bannedWord = "peste";
         String message = "spor la cafelutsa cu " + bannedWord;
-        MessageInfo messageInfo = new MessageInfo(groupChat, user, message);
-        String serialized = MessageInfo.serialize(messageInfo);
+        UserMessage userMessage = new UserMessage(user, message);
+        String serialized = UserMessage.serialize(userMessage);
 
-        inputTopic.pipeInput(groupChat.getChatID(), serialized, 0L);
+        inputTopic.pipeInput(groupChat, serialized, 0L);
 
         TestRecord<String, String> record = outputTopic.readRecord();
-        MessageInfo fetchedMessage = MessageInfo.deserialize(record.value());
-        assertEquals(messageInfo, fetchedMessage);
+        UserMessage fetchedMessage = UserMessage.deserialize(record.value());
+        assertEquals(userMessage, fetchedMessage);
 
         bannedWordsTopic.pipeInput(bannedWord, bannedWord, 1000L);
-        inputTopic.pipeInput(groupChat.getChatID(), serialized, 1400L);
+        inputTopic.pipeInput(groupChat, serialized, 1400L);
 
         record = outputTopic.readRecord();
-        fetchedMessage = MessageInfo.deserialize(record.value());
-        assertNotEquals(messageInfo, fetchedMessage);
+        fetchedMessage = UserMessage.deserialize(record.value());
+        assertNotEquals(userMessage, fetchedMessage);
     }
 }
