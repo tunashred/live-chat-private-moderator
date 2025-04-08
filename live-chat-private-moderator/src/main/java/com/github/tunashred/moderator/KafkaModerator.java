@@ -121,19 +121,19 @@ public class KafkaModerator {
                     }
                 }));
 
-        // produce to client consumer topic
         processedStream
-                .flatMap((key, processedMessage) -> {
+                .map((key, processedMessage) -> {
                     String topicName = processedMessage.getChannelName();
-                    logger.trace("Sending message to channel '" + topicName + "'");
                     try {
                         String serialized = UserMessage.serialize(processedMessage.getUserMessage());
-                        return Collections.singletonList(KeyValue.pair(topicName, serialized));
+                        return KeyValue.pair(topicName, serialized);
                     } catch (JsonProcessingException e) {
-                        return Collections.emptyList();
+                        // TODO: add logger
+                        return null;
                     }
                 })
-                .to(((key, value, recordContext) -> key));
+                .filter((_, value) -> value != null)
+                .to(((key, value, ctx) -> key));
 
         // if processed message was flagged, then store for later
         processedStream
