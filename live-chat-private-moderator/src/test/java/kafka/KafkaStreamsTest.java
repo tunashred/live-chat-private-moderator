@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
-import java.util.concurrent.CountDownLatch;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -58,11 +57,10 @@ public class KafkaStreamsTest {
 
     @BeforeEach
     void setup() {
-        final CountDownLatch initialLoadLatch = new CountDownLatch(1);
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
         final String inputTopicName = "unsafe-messages";
-        Topology topology = KafkaModerator.createTopology(inputTopicName, wordsTrie, moderator, initialLoadLatch);
+        Topology topology = KafkaModerator.createTopology(inputTopicName, wordsTrie, moderator);
 
         Properties props = new Properties();
         props.put(APPLICATION_ID_CONFIG, "kafka-stream-test");

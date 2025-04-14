@@ -22,11 +22,8 @@ import org.apache.logging.log4j.message.MapMessage;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 public class KafkaModerator {
     private static final Logger logger = LogManager.getLogger(KafkaModerator.class);
@@ -44,37 +41,23 @@ public class KafkaModerator {
 
         logger.info("Initializing KTable and KStream.");
 
-        final CountDownLatch initialLoadLatch = new CountDownLatch(1);
         Moderator moderator = new Moderator();
         WordsTrie wordsTrie = new WordsTrie();
 
-        final Topology topology = createTopology(sourceTopic, wordsTrie, moderator, initialLoadLatch);
+        final Topology topology = createTopology(sourceTopic, wordsTrie, moderator);
 
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
 
         Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
 
         logger.info("Starting moderator streams application");
+        loadStoreManually(streams, wordsTrie, moderator);
         streams.start();
 
-        int timeout = 30;
-        logger.info("Waiting " + timeout + " seconds for KTable to fetch record from topic '" + bannedWordsTopic + "'");
-        // TODO: rethink this thing
-        // it is pretty bad because the moderator can consume and produce before the ktable is loaded
-        try {
-            if (!initialLoadLatch.await(timeout, TimeUnit.SECONDS)) {
-                logger.warn("Timed out while waiting for banned words list to be loaded");
-                loadStoreManually(streams, wordsTrie, moderator);
-            }
-            logger.info("Moderator ready to process messages");
-        } catch (InterruptedException e) {
-            logger.warn("Application interrupted: ", e);
-            Thread.currentThread().interrupt();
-        }
     }
 
     // TODO: maybe for future there will be different banned words topics and multiple flagged messages topics
-    public static Topology createTopology(String inputTopic, WordsTrie wordsTrie, Moderator moderator, CountDownLatch initialLoadLatch) {
+    public static Topology createTopology(String inputTopic, WordsTrie wordsTrie, Moderator moderator) {
         StreamsBuilder builder = new StreamsBuilder();
         KStream<String, String> inputStream = builder.stream(inputTopic);
 
@@ -97,8 +80,6 @@ public class KafkaModerator {
                 wordsTrie.addWord(key);
             }
             moderator.setBannedWords(wordsTrie.getTrie());
-
-            initialLoadLatch.countDown();
         });
 
         // consume and process
@@ -154,6 +135,16 @@ public class KafkaModerator {
     }
 
     static private void loadStoreManually(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {
+        streams.setStateListener(((newState, oldState) -> {
+            if (newState == KafkaStreams.State.RUNNING && oldState != KafkaStreams.State.RUNNING) {
+                logger.info("Moderator is now running");
+
+                loadStore(streams, wordsTrie, moderator);
+            }
+        }));
+    }
+
+    static private void loadStore(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {
         final String storeName = bannedWordsTopic + "-store";
         try {
             logger.info("Trying to load manually the words into from store");
@@ -179,7 +170,7 @@ public class KafkaModerator {
             }
 
             if (wordsTrie.getTrie() == null) {
-                logger.error("Trie is empty after manual load");
+                logger.error("KTable store is empty");
             } else {
                 moderator.setBannedWords(wordsTrie.getTrie());
                 logger.info("All banned words loaded successfully: " + count + " words processed");
