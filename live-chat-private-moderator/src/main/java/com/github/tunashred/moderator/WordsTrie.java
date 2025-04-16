@@ -1,18 +1,24 @@
 package com.github.tunashred.moderator;
 
-import lombok.Getter;
+import lombok.*;
+import lombok.experimental.FieldDefaults;
 import org.ahocorasick.trie.Trie;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class WordsTrie {
-    private final Set<String> words = new HashSet<>();
-    @Getter
-    private Trie trie;
+    Set<String> words = new HashSet<>();
+    Trie trie;
+    String sourceFile; // maybe make this final?
 
-    public WordsTrie() {
+    public WordsTrie(String sourceFile) {
+        this.sourceFile = sourceFile;
     }
 
     public void addWord(String word) {
@@ -31,6 +37,20 @@ public class WordsTrie {
         }
 
         if (words.remove(word)) {
+            rebuild();
+        }
+    }
+
+    public void addBatch(List<String> wordsToAdd) {
+        boolean tainted = false;
+
+        for (String word : wordsToAdd) {
+            if (words.add(word)) {
+                tainted = true;
+            }
+        }
+
+        if (tainted) {
             rebuild();
         }
     }
@@ -60,6 +80,8 @@ public class WordsTrie {
         for (String word : words) {
             builder.addKeyword(word.trim().toLowerCase());
         }
-        this.trie =  builder.build();
+        this.trie = builder.build();
     }
+
+
 }
