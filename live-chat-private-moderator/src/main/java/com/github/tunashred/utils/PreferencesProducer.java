@@ -44,7 +44,7 @@ public class PreferencesProducer {
         List<String> packsHashes = FileUtil.getFileHashes("packs");
 
         Map<String, List<String>> streamerPreferences = new HashMap<>();
-        streamerPreferences.put("satu-mare", Arrays.asList(FileUtil.getFileHashByName("romanisme.txt")));
+        streamerPreferences.put("satu-mare", Arrays.asList(packsHashes.get(1)));
         streamerPreferences.put("baia-mare", packsHashes);
 
         for (Map.Entry<String, List<String>> preference : streamerPreferences.entrySet()) {

@@ -74,6 +74,7 @@ public class FileUtil {
     }
 
     // TODO: revisit the logic here
+    // TODO 2: seems like this does not work properly
     static public String getFileHashByName(String fileName) throws IOException {
         Path path = Paths.get(fileName);
         if (!fileExists(path)) {
