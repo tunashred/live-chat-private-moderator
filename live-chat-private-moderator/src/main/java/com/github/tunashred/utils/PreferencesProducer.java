@@ -41,7 +41,7 @@ public class PreferencesProducer {
     }
 
     public void addPreferences() throws IOException {
-        List<String> packsHashes = FileUtil.getFileHashes("packs");
+        List<String> packsHashes = FileUtil.getFileHash("packs");
 
         Map<String, List<String>> streamerPreferences = new HashMap<>();
         streamerPreferences.put("satu-mare", Arrays.asList(packsHashes.get(1)));

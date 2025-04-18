@@ -1,15 +1,18 @@
 package com.github.tunashred.moderator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tunashred.dtos.UserMessage;
 import com.github.tunashred.privatedtos.ProcessedMessage;
+import com.github.tunashred.utils.FileUtil;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.errors.InvalidStateStoreException;
 import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.GlobalKTable;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
@@ -17,90 +20,83 @@ import org.apache.kafka.streams.state.QueryableStoreTypes;
 import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.message.MapMessage;
 
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class KafkaModerator {
     private static final Logger logger = LogManager.getLogger(KafkaModerator.class);
     private static final String sourceTopic = "unsafe_chat";
     private static final String bannedWordsTopic = "banned-words";
     private static final String flaggedTopic = "flagged_messages";
+    private static final String preferencesTopic = "streamer-preferences";
+    private static Map<String, WordsTrie> loadedPacks = new HashMap<>();
+    private static Map<String, List<WordsTrie>> streamerPacks = new HashMap<>();
+
 
     public static void main(String[] args) throws RuntimeException {
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
+
+            loadedPacks = FileUtil.loadPacks("packs");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
         logger.info("Initializing KTable and KStream.");
 
-        Moderator moderator = new Moderator();
-        WordsTrie wordsTrie = new WordsTrie();
-
-        final Topology topology = createTopology(sourceTopic, wordsTrie, moderator);
+        final Topology topology = createTopology(sourceTopic);
 
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
 
         Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
 
         logger.info("Starting moderator streams application");
-        loadStoreManually(streams, wordsTrie, moderator);
         streams.start();
 
     }
 
     // TODO: maybe for future there will be different banned words topics and multiple flagged messages topics
-    public static Topology createTopology(String inputTopic, WordsTrie wordsTrie, Moderator moderator) {
+    public static Topology createTopology(String inputTopic) {
         StreamsBuilder builder = new StreamsBuilder();
         KStream<String, String> inputStream = builder.stream(inputTopic);
 
-        KTable<String, String> bannedWordsTable = builder
-                .table(
-                        bannedWordsTopic,
-                        Consumed.with(Serdes.String(), Serdes.String())
-                                .withOffsetResetPolicy(Topology.AutoOffsetReset.EARLIEST),
-                        Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as("banned-words-store")
-                                .withKeySerde(Serdes.String())
-                                .withValueSerde(Serdes.String())
-                                .withCachingDisabled()
-                );
+        GlobalKTable<String, String> streamerPackPreferences = builder.globalTable(
+                preferencesTopic,
+                Consumed.with(Serdes.String(), Serdes.String())
+                        .withOffsetResetPolicy(Topology.AutoOffsetReset.EARLIEST),
+                Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as(preferencesTopic + "-store")
+                        .withKeySerde(Serdes.String())
+                        .withValueSerde(Serdes.String())
+                        .withCachingDisabled()
+        );
 
-        bannedWordsTable.toStream().foreach((key, value) -> {
-            logger.info("Received update for banned word: key - " + key + ", value - " + value);
-            if (value == null) {
-                wordsTrie.removeWord(key);
-            } else {
-                wordsTrie.addWord(key);
-            }
-            moderator.setBannedWords(wordsTrie.getTrie());
-        });
+        KStream<String, StreamWrapper> wrappedStream = inputStream.mapValues(StreamWrapper::new);
 
-        // consume and process
-        KStream<String, ProcessedMessage> processedStream = inputStream
-                .map(((key, value) -> {
+        KStream<String, ProcessedMessage> processedStream = wrappedStream.join(
+                streamerPackPreferences,
+                (key, value) -> key,
+                (wrappedMessage, serializedPreferencesList) -> {
+                    logger.trace("Received message to process");
+                    String streamerID = wrappedMessage.getKey();
+                    UserMessage userMessage;
+
                     try {
-                        UserMessage userMessage = UserMessage.deserialize(value);
-                        ProcessedMessage processedMessage = moderator.censor(userMessage, key);
-                        logger.trace(() -> new MapMessage<>(Map.of(
-                                "GroupChat", key,
-                                "User", userMessage.getUsername(),
-                                "Original message", processedMessage.getOriginalMessage(),
-                                "Processed message", processedMessage.getUserMessage().getMessage()
-                        )));
-
-                        return KeyValue.pair(key, processedMessage);
+                        userMessage = UserMessage.deserialize(wrappedMessage.getValue());
                     } catch (JsonProcessingException e) {
                         logger.warn("Encountered exception while trying to deserialize record: ", e);
                         return null;
                     }
-                }));
+
+                    List<WordsTrie> streamerTries = getStreamerTries(streamerID, serializedPreferencesList);
+
+                    return ModeratorPack.censor(streamerTries, userMessage, streamerID);
+                }
+        );
 
         processedStream
                 .map((key, processedMessage) -> {
@@ -132,6 +128,33 @@ public class KafkaModerator {
                 .to(flaggedTopic);
 
         return builder.build();
+    }
+
+    private static List<WordsTrie> getStreamerTries(String streamerID, String preferences) {
+        try {
+            List<String> preferencesList = deserializePreferences(preferences);
+            List<WordsTrie> triesList = mapPreferencesToTries(preferencesList);
+
+            streamerPacks.put(streamerID, triesList);
+
+            return triesList;
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+            return streamerPacks.getOrDefault(streamerID, Collections.emptyList());
+        }
+    }
+
+    private static List<String> deserializePreferences(String preferences) throws JsonProcessingException {
+        ObjectMapper reader = new ObjectMapper();
+        return reader.readValue(preferences, new TypeReference<ArrayList<String>>() {
+        });
+    }
+
+    private static List<WordsTrie> mapPreferencesToTries(List<String> preferences) {
+        return preferences.stream()
+                .map(loadedPacks::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     static private void loadStoreManually(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {

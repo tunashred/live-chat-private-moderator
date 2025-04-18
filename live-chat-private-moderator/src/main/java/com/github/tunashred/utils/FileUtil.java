@@ -64,7 +64,7 @@ public class FileUtil {
         return files;
     }
 
-    static public List<String> getFileHashes(String dirPath) throws IOException {
+    static public List<String> getFileHash(String dirPath) throws IOException {
         List<String> files = Files.list(Paths.get(dirPath))
                 .filter(Files::isRegularFile)
                 .map(path -> String.valueOf(path.hashCode()))
