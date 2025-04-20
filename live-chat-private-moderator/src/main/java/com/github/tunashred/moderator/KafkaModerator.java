@@ -1,23 +1,20 @@
 package com.github.tunashred.moderator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tunashred.dtos.UserMessage;
 import com.github.tunashred.privatedtos.ProcessedMessage;
-import com.github.tunashred.utils.FileUtil;
+import com.github.tunashred.utils.PreferencesProducer;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
-import org.apache.kafka.streams.*;
-import org.apache.kafka.streams.errors.InvalidStateStoreException;
+import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.kstream.Consumed;
 import org.apache.kafka.streams.kstream.GlobalKTable;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.Materialized;
-import org.apache.kafka.streams.state.KeyValueIterator;
 import org.apache.kafka.streams.state.KeyValueStore;
-import org.apache.kafka.streams.state.QueryableStoreTypes;
-import org.apache.kafka.streams.state.ReadOnlyKeyValueStore;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,22 +27,25 @@ import java.util.stream.Collectors;
 public class KafkaModerator {
     private static final Logger logger = LogManager.getLogger(KafkaModerator.class);
     private static final String sourceTopic = "unsafe_chat";
-    private static final String bannedWordsTopic = "banned-words";
     private static final String flaggedTopic = "flagged_messages";
     private static final String preferencesTopic = "streamer-preferences";
-    private static Map<String, WordsTrie> loadedPacks = new HashMap<>();
+
+    private static final PacksData loadedPacks = new PacksData();
+    private static PackConsumer packConsumer;
     private static Map<String, List<WordsTrie>> streamerPacks = new HashMap<>();
 
-
-    public static void main(String[] args) throws RuntimeException {
+    public static void main(String[] args) throws RuntimeException, IOException {
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
 
-            loadedPacks = FileUtil.loadPacks("packs");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        logger.info("Initializing pack consumer.");
+        packConsumer = new PackConsumer(loadedPacks, 1000);
+        Thread consumerThread = new Thread(packConsumer);
+        consumerThread.start();
 
         logger.info("Initializing KTable and KStream.");
 
@@ -54,10 +54,15 @@ public class KafkaModerator {
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
 
         Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
+        Runtime.getRuntime().addShutdownHook(new Thread(packConsumer::close));
 
         logger.info("Starting moderator streams application");
+        streams.setStateListener(((newState, oldState) -> {
+            if (newState == KafkaStreams.State.RUNNING && oldState != KafkaStreams.State.RUNNING) {
+                logger.info("Moderator ready");
+            }
+        }));
         streams.start();
-
     }
 
     // TODO: maybe for future there will be different banned words topics and multiple flagged messages topics
@@ -132,7 +137,7 @@ public class KafkaModerator {
 
     private static List<WordsTrie> getStreamerTries(String streamerID, String preferences) {
         try {
-            List<String> preferencesList = deserializePreferences(preferences);
+            List<String> preferencesList = PreferencesProducer.deserializeList(preferences);
             List<WordsTrie> triesList = mapPreferencesToTries(preferencesList);
 
             streamerPacks.put(streamerID, triesList);
@@ -144,62 +149,10 @@ public class KafkaModerator {
         }
     }
 
-    private static List<String> deserializePreferences(String preferences) throws JsonProcessingException {
-        ObjectMapper reader = new ObjectMapper();
-        return reader.readValue(preferences, new TypeReference<ArrayList<String>>() {
-        });
-    }
-
     private static List<WordsTrie> mapPreferencesToTries(List<String> preferences) {
         return preferences.stream()
-                .map(loadedPacks::get)
+                .map(loadedPacks.getPacks()::get)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
-    }
-
-    static private void loadStoreManually(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {
-        streams.setStateListener(((newState, oldState) -> {
-            if (newState == KafkaStreams.State.RUNNING && oldState != KafkaStreams.State.RUNNING) {
-                logger.info("Moderator is now running");
-
-                loadStore(streams, wordsTrie, moderator);
-            }
-        }));
-    }
-
-    static private void loadStore(KafkaStreams streams, WordsTrie wordsTrie, Moderator moderator) {
-        final String storeName = bannedWordsTopic + "-store";
-        try {
-            logger.info("Trying to load manually the words into from store");
-            ReadOnlyKeyValueStore<String, String> store =
-                    streams.store(StoreQueryParameters.fromNameAndType(storeName, QueryableStoreTypes.keyValueStore()));
-
-            int count = 0;
-            try (KeyValueIterator<String, String> iterator = store.all()) {
-                while (iterator.hasNext()) {
-                    KeyValue<String, String> entry = iterator.next();
-                    String key = entry.key;
-                    String value = entry.value;
-
-                    logger.info("Manually added word: " + key);
-
-                    if (value == null) {
-                        wordsTrie.removeWord(key);
-                    } else {
-                        wordsTrie.addWord(key);
-                    }
-                    count++;
-                }
-            }
-
-            if (wordsTrie.getTrie() == null) {
-                logger.error("KTable store is empty");
-            } else {
-                moderator.setBannedWords(wordsTrie.getTrie());
-                logger.info("All banned words loaded successfully: " + count + " words processed");
-            }
-        } catch (InvalidStateStoreException e) {
-            logger.error("Failed to access store '" + storeName + "': ", e);
-        }
     }
 }
