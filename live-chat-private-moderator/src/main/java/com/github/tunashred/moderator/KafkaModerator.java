@@ -65,7 +65,7 @@ public class KafkaModerator {
         streams.start();
     }
 
-    // TODO: maybe for future there will be different banned words topics and multiple flagged messages topics
+    // TODO: maybe for future there will be multiple flagged messages topics?
     public static Topology createTopology(String inputTopic) {
         log.info("Creating topology");
         StreamsBuilder builder = new StreamsBuilder();
