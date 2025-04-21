@@ -4,6 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.UserMessage;
 import com.github.tunashred.privatedtos.ProcessedMessage;
 import com.github.tunashred.utils.PreferencesProducer;
+import lombok.AccessLevel;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.log4j.Log4j2;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.utils.Bytes;
 import org.apache.kafka.streams.KafkaStreams;
@@ -15,8 +18,6 @@ import org.apache.kafka.streams.kstream.GlobalKTable;
 import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.state.KeyValueStore;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -24,15 +25,16 @@ import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Log4j2
+@FieldDefaults(level = AccessLevel.PRIVATE)
 public class KafkaModerator {
-    private static final Logger logger = LogManager.getLogger(KafkaModerator.class);
-    private static final String sourceTopic = "unsafe_chat";
-    private static final String flaggedTopic = "flagged_messages";
-    private static final String preferencesTopic = "streamer-preferences";
+    static final String sourceTopic = "unsafe_chat";
+    static final String flaggedTopic = "flagged_messages";
+    static final String preferencesTopic = "streamer-preferences";
 
-    private static final PacksData loadedPacks = new PacksData();
-    private static PackConsumer packConsumer;
-    private static Map<String, List<WordsTrie>> streamerPacks = new HashMap<>();
+    static final PacksData loadedPacks = new PacksData();
+    static PackConsumer packConsumer;
+    static Map<String, List<WordsTrie>> streamerPacks = new HashMap<>();
 
     public static void main(String[] args) throws RuntimeException, IOException {
         Properties streamsProps = new Properties();
@@ -42,12 +44,10 @@ public class KafkaModerator {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        logger.info("Initializing pack consumer.");
+        log.info("Initializing pack consumer.");
         packConsumer = new PackConsumer(loadedPacks, 1000);
         Thread consumerThread = new Thread(packConsumer);
         consumerThread.start();
-
-        logger.info("Initializing KTable and KStream.");
 
         final Topology topology = createTopology(sourceTopic);
 
@@ -56,10 +56,10 @@ public class KafkaModerator {
         Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
         Runtime.getRuntime().addShutdownHook(new Thread(packConsumer::close));
 
-        logger.info("Starting moderator streams application");
+        log.info("Starting moderator streams application");
         streams.setStateListener(((newState, oldState) -> {
             if (newState == KafkaStreams.State.RUNNING && oldState != KafkaStreams.State.RUNNING) {
-                logger.info("Moderator ready");
+                log.info("Moderator ready");
             }
         }));
         streams.start();
@@ -67,6 +67,7 @@ public class KafkaModerator {
 
     // TODO: maybe for future there will be different banned words topics and multiple flagged messages topics
     public static Topology createTopology(String inputTopic) {
+        log.info("Creating topology");
         StreamsBuilder builder = new StreamsBuilder();
         KStream<String, String> inputStream = builder.stream(inputTopic);
 
@@ -84,16 +85,17 @@ public class KafkaModerator {
 
         KStream<String, ProcessedMessage> processedStream = wrappedStream.join(
                 streamerPackPreferences,
-                (key, value) -> key,
+                (key, _) -> key,
                 (wrappedMessage, serializedPreferencesList) -> {
-                    logger.trace("Received message to process");
+                    log.trace("Received message to process: " + wrappedMessage);
                     String streamerID = wrappedMessage.getKey();
                     UserMessage userMessage;
 
                     try {
                         userMessage = UserMessage.deserialize(wrappedMessage.getValue());
+                        log.trace("Message deserialized");
                     } catch (JsonProcessingException e) {
-                        logger.warn("Encountered exception while trying to deserialize record: ", e);
+                        log.warn("Encountered exception while trying to deserialize record: ", e);
                         return null;
                     }
 
@@ -110,12 +112,12 @@ public class KafkaModerator {
                         String serialized = UserMessage.serialize(processedMessage.getUserMessage());
                         return KeyValue.pair(topicName, serialized);
                     } catch (JsonProcessingException e) {
-                        // TODO: add logger
+                        log.warn("Encountered exception while trying to serialize UserMessage: ", e);
                         return null;
                     }
                 })
                 .filter((_, value) -> value != null)
-                .to(((key, value, ctx) -> key));
+                .to(((key, _, _) -> key));
 
         // if processed message was flagged, then store for later
         processedStream
@@ -123,9 +125,10 @@ public class KafkaModerator {
                 .map((_, processedMessage) -> {
                     try {
                         String key = processedMessage.getChannelName() + processedMessage.getUserMessage().getUsername();
+                        log.trace("Flagged message created: " + processedMessage);
                         return KeyValue.pair(key, ProcessedMessage.serialize(processedMessage));
                     } catch (JsonProcessingException e) {
-                        logger.warn("Encountered exception while trying to create new record for '" + flaggedTopic + "': ", e);
+                        log.warn("Encountered exception while trying to create new record for '" + flaggedTopic + "': ", e);
                         return null;
                     }
                 })
@@ -144,7 +147,7 @@ public class KafkaModerator {
 
             return triesList;
         } catch (JsonProcessingException e) {
-            e.printStackTrace();
+            log.warn("Encountered exception while trying to deserialize list of preferences");
             return streamerPacks.getOrDefault(streamerID, Collections.emptyList());
         }
     }

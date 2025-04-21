@@ -18,7 +18,7 @@ import java.util.Set;
 public class WordsTrie {
     Set<String> words = new HashSet<>();
     Trie trie;
-    String sourceFile; // maybe make this final?
+    String sourceFile;
 
     public WordsTrie(String sourceFile) {
         this.sourceFile = sourceFile;
@@ -85,6 +85,4 @@ public class WordsTrie {
         }
         this.trie = builder.build();
     }
-
-
 }

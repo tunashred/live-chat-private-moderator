@@ -9,6 +9,7 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 
+// warning: this class became obsolete after various design decisions and shifts in perspective
 public class Moderator {
     private Trie bannedWords;
 

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
 import lombok.Data;
 import lombok.experimental.FieldDefaults;
+import lombok.extern.log4j.Log4j2;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.Producer;
@@ -19,12 +20,14 @@ import java.util.*;
 
 import static org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG;
 
+// TODO: actually this should be usable in the swagger-ui demonstration repo for the channel streamer api
+// feel free to skip this for now
+// also, no logging here yet
 @Data
 @FieldDefaults(level = AccessLevel.PRIVATE)
-// TODO: add logging
 public class PreferencesProducer {
     final String preferencesTopic = "streamer-preferences";
-    private List<String> packs;
+    List<String> packs;
     Producer<String, String> producer;
     KafkaConsumer<String, String> consumer;
 

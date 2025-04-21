@@ -1,10 +1,9 @@
 package com.github.tunashred.moderator;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.errors.WakeupException;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -15,41 +14,41 @@ import java.util.regex.Pattern;
 
 import static org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG;
 
+@Log4j2
 public class PackConsumer implements Runnable {
-    private static final Logger logger = LogManager.getLogger(PackConsumer.class);
     private static KafkaConsumer<String, String> consumer = null;
+    private static volatile boolean running = true;
     private final PacksData packsData;
     private final long sleepMillis;
-    private volatile boolean running = true;
 
     public PackConsumer(PacksData packsData, long sleepMillis) throws IOException {
-        logger.info("Loading consumer properties");
+        log.info("Loading consumer properties");
         Properties consumerProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/consumer.properties")) {
             consumerProps.load(propsFile);
             consumerProps.put(GROUP_ID_CONFIG, "consumer-packs-2"); // TODO: revise this
-            this.consumer = new KafkaConsumer<>(consumerProps);
+            consumer = new KafkaConsumer<>(consumerProps);
         }
         this.packsData = packsData;
         this.sleepMillis = sleepMillis;
-        logger.info("Consumer created");
+        log.info("Consumer created");
     }
 
     private static void jumpToBeginning() {
-        while (true) {
-            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
-
-            if (!consumer.assignment().isEmpty()) {
-                consumer.seekToBeginning(consumer.assignment());
-                break;
-            }
+        log.info("Seeking to beginning of partitions");
+        while (consumer.assignment().isEmpty()) {
+            consumer.poll(Duration.ofMillis(100));
+            log.trace("Polling for partition allocation");
         }
+        consumer.seekToBeginning(consumer.assignment());
+        log.trace("Offsets set to beginning");
     }
 
     @Override
     public void run() {
-        logger.info("Consumer started");
+        log.info("Consumer started");
         Pattern pattern = Pattern.compile("^pack-.*");
+        // TODO: what about adding a log which tells to which packs it is subscribed to?
         consumer.subscribe(pattern);
         jumpToBeginning();
 
@@ -58,7 +57,7 @@ public class PackConsumer implements Runnable {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
                 for (var record : records) {
                     String topic = record.topic();
-                    logger.trace("Record consumed from pack " + topic);
+                    log.trace("Record consumed from pack " + topic);
                     if (record.value() != null) {
                         packsData.addWord(topic, record.key());
                     } else {
@@ -76,7 +75,7 @@ public class PackConsumer implements Runnable {
                 break;
             }
         }
-        logger.info("Closing consumer");
+        log.info("Closing consumer");
         consumer.close();
     }
 

@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class PacksData {
+    // TODO: switch to a normal hashmap?
     Map<String, WordsTrie> packs = new ConcurrentHashMap<>();
 
     public void addWord(String topic, String word) {

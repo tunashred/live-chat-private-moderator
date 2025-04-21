@@ -12,7 +12,7 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
-// warning: this class became absolete after various design decisions and shifts in perspective
+// warning: this class became obsolete after various design decisions and shifts in perspective
 public class FileUtil {
     public static void main(String[] args) throws IOException {
         getFileNames("packs");
