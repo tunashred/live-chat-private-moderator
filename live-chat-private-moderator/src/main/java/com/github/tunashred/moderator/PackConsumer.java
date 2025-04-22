@@ -1,8 +1,11 @@
 package com.github.tunashred.moderator;
 
+import lombok.AccessLevel;
+import lombok.experimental.FieldDefaults;
 import lombok.extern.log4j.Log4j2;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.WakeupException;
 
 import java.io.FileInputStream;
@@ -11,15 +14,17 @@ import java.io.InputStream;
 import java.time.Duration;
 import java.util.Properties;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG;
 
+@FieldDefaults(level = AccessLevel.PRIVATE)
 @Log4j2
 public class PackConsumer implements Runnable {
-    private static KafkaConsumer<String, String> consumer = null;
-    private static volatile boolean running = true;
-    private final PacksData packsData;
-    private final long sleepMillis;
+    static KafkaConsumer<String, String> consumer = null;
+    static volatile boolean running = true;
+    final PacksData packsData;
+    final long sleepMillis;
 
     public PackConsumer(PacksData packsData, long sleepMillis) throws IOException {
         log.info("Loading consumer properties");
@@ -50,18 +55,27 @@ public class PackConsumer implements Runnable {
         Pattern pattern = Pattern.compile("^pack-.*");
         // TODO: what about adding a log which tells to which packs it is subscribed to?
         consumer.subscribe(pattern);
+        log.info("Subscribed to topics: {}",
+                consumer.assignment().stream()
+                        .map(TopicPartition::topic)
+                        .collect(Collectors.toSet())
+        );
         jumpToBeginning();
 
         while (running) {
             try {
+                log.trace("Polling for packs updates");
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
                 for (var record : records) {
+                    log.trace("Record to be processed: " + record);
                     String topic = record.topic();
                     log.trace("Record consumed from pack " + topic);
                     if (record.value() != null) {
                         packsData.addWord(topic, record.key());
+                        log.trace("New word '" + record.key() + "'" + " from pack topic '" + topic + "'");
                     } else {
                         packsData.removeWord(topic, record.key());
+                        log.trace("Removed word '" + record.key() + "'" + " from pack topic '" + topic + "'");
                     }
                 }
                 consumer.commitSync();

@@ -21,6 +21,8 @@
         <project.resources.sourceEncoding>${project.encoding}</project.resources.sourceEncoding>
         <archetype.encoding>${project.encoding}</archetype.encoding>
 
+        <com.github.tunashred.dtos.version>2.0-SNAPSHOT</com.github.tunashred.dtos.version>
+        <com.github.tunashred.privatedtos.version>2.0-SNAPSHOT</com.github.tunashred.privatedtos.version>
         <lombok.version>1.18.36</lombok.version>
         <kafka.version>3.7.1</kafka.version>
         <ahocorasick.version>0.6.3</ahocorasick.version>
@@ -33,55 +35,62 @@
         <dependency>
             <groupId>com.github.tunashred</groupId>
             <artifactId>live-chat-dtos</artifactId>
-            <version>2.0-SNAPSHOT</version>
+            <version>${com.github.tunashred.dtos.version}</version>
         </dependency>
 
         <dependency>
             <groupId>com.github.tunashred</groupId>
             <artifactId>live-chat-private-dtos</artifactId>
-            <version>2.0-SNAPSHOT</version>
+            <version>${com.github.tunashred.privatedtos.version}</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
             <version>${kafka.version}</version>
+            <!-- https://mvnrepository.com/artifact/org.apache.kafka/kafka-clients -->
         </dependency>
 
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-streams</artifactId>
             <version>${kafka.version}</version>
+            <!-- https://mvnrepository.com/artifact/org.apache.kafka/kafka-streams -->
         </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <version>${lombok.version}</version>
+            <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
         </dependency>
 
         <dependency>
             <groupId>org.ahocorasick</groupId>
             <artifactId>ahocorasick</artifactId>
             <version>${ahocorasick.version}</version>
+            <!-- https://mvnrepository.com/artifact/org.ahocorasick/ahocorasick -->
         </dependency>
 
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
             <version>${jackson.version}</version>
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-core -->
         </dependency>
 
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-databind -->
         </dependency>
 
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
             <version>${jackson.version}</version>
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-annotations -->
         </dependency>
 
         <dependency>
@@ -116,6 +125,7 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-slf4j-impl</artifactId>
             <version>${org.apache.logging.log4j.version}</version>
+            <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-slf4j-impl -->
         </dependency>
 
         <dependency>
@@ -123,6 +133,7 @@
             <artifactId>kafka-streams-test-utils</artifactId>
             <version>${kafka.version}</version>
             <scope>test</scope>
+            <!-- https://mvnrepository.com/artifact/org.apache.kafka/kafka-streams-test-utils -->
         </dependency>
 
         <dependency>
@@ -130,6 +141,7 @@
             <artifactId>junit-jupiter</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
+            <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
         </dependency>
 
         <dependency>
@@ -137,6 +149,7 @@
             <artifactId>junit-jupiter-api</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
+            <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-api -->
         </dependency>
 
         <dependency>
@@ -144,8 +157,8 @@
             <artifactId>junit-jupiter-engine</artifactId>
             <version>${junit.version}</version>
             <scope>test</scope>
+            <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine -->
         </dependency>
-
     </dependencies>
 
     <build>
@@ -165,5 +178,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

@@ -37,17 +37,19 @@ public class KafkaModerator {
     static Map<String, List<WordsTrie>> streamerPacks = new HashMap<>();
 
     public static void main(String[] args) throws RuntimeException, IOException {
+        log.info("Loading streams properties");
         Properties streamsProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
-
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        log.info("Initializing pack consumer.");
+
+        log.info("Initializing pack consumer");
         packConsumer = new PackConsumer(loadedPacks, 1000);
         Thread consumerThread = new Thread(packConsumer);
         consumerThread.start();
+        log.info("Pack consumer thread started");
 
         final Topology topology = createTopology(sourceTopic);
 
