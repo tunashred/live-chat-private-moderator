@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 // warning: this class became obsolete after various design decisions and shifts in perspective
+// atm this is being kept if the code might prove useful in the near future
 public class FileUtil {
     public static void main(String[] args) throws IOException {
         getFileNames("packs");

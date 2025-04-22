@@ -53,14 +53,13 @@ public class PackConsumer implements Runnable {
     public void run() {
         log.info("Consumer started");
         Pattern pattern = Pattern.compile("^pack-.*");
-        // TODO: what about adding a log which tells to which packs it is subscribed to?
         consumer.subscribe(pattern);
+        jumpToBeginning();
         log.info("Subscribed to topics: {}",
                 consumer.assignment().stream()
                         .map(TopicPartition::topic)
                         .collect(Collectors.toSet())
         );
-        jumpToBeginning();
 
         while (running) {
             try {
