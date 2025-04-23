@@ -21,7 +21,7 @@ import static org.apache.kafka.clients.consumer.ConsumerConfig.GROUP_ID_CONFIG;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 @Log4j2
 public class PackConsumer implements Runnable {
-    static KafkaConsumer<String, String> consumer = null;
+    static KafkaConsumer<String, Boolean> consumer = null;
     static volatile boolean running = true;
     final PacksData packsData;
     final long sleepMillis;
@@ -31,7 +31,7 @@ public class PackConsumer implements Runnable {
         Properties consumerProps = new Properties();
         try (InputStream propsFile = new FileInputStream("src/main/resources/consumer.properties")) {
             consumerProps.load(propsFile);
-            consumerProps.put(GROUP_ID_CONFIG, "consumer-packs-2"); // TODO: revise this
+            consumerProps.put(GROUP_ID_CONFIG, "consumer-packs-1"); // TODO: revise this
             consumer = new KafkaConsumer<>(consumerProps);
         }
         this.packsData = packsData;
@@ -64,12 +64,12 @@ public class PackConsumer implements Runnable {
         while (running) {
             try {
                 log.trace("Polling for packs updates");
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(1000));
+                ConsumerRecords<String, Boolean> records = consumer.poll(Duration.ofMillis(1000));
                 for (var record : records) {
                     log.trace("Record to be processed: " + record);
                     String topic = record.topic();
                     log.trace("Record consumed from pack " + topic);
-                    if (record.value() != null) {
+                    if (record.value()) {
                         packsData.addWord(topic, record.key());
                         log.trace("New word '" + record.key() + "'" + " from pack topic '" + topic + "'");
                     } else {

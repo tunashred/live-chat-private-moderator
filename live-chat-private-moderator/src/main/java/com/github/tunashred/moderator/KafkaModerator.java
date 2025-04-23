@@ -28,9 +28,9 @@ import java.util.stream.Collectors;
 @Log4j2
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class KafkaModerator {
-    static final String sourceTopic = "unsafe_chat";
-    static final String flaggedTopic = "flagged_messages";
-    static final String preferencesTopic = "streamer-preferences";
+    static final String SOURCE_TOPIC = "unsafe_chat";
+    static final String FLAGGED_TOPIC = "flagged_messages";
+    static final String PREFERENCES_TOPIC = "streamer-preferences";
 
     static final PacksData loadedPacks = new PacksData();
     static PackConsumer packConsumer;
@@ -42,7 +42,8 @@ public class KafkaModerator {
         try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
             streamsProps.load(propsFile);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            log.error("Unable to load streams properties", e);
+            return;
         }
 
         log.info("Initializing pack consumer");
@@ -51,7 +52,7 @@ public class KafkaModerator {
         consumerThread.start();
         log.info("Pack consumer thread started");
 
-        final Topology topology = createTopology(sourceTopic);
+        final Topology topology = createTopology(SOURCE_TOPIC);
 
         KafkaStreams streams = new KafkaStreams(topology, streamsProps);
 
@@ -74,10 +75,10 @@ public class KafkaModerator {
         KStream<String, String> inputStream = builder.stream(inputTopic);
 
         GlobalKTable<String, String> streamerPackPreferences = builder.globalTable(
-                preferencesTopic,
+                PREFERENCES_TOPIC,
                 Consumed.with(Serdes.String(), Serdes.String())
                         .withOffsetResetPolicy(Topology.AutoOffsetReset.EARLIEST),
-                Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as(preferencesTopic + "-store")
+                Materialized.<String, String, KeyValueStore<Bytes, byte[]>>as(PREFERENCES_TOPIC + "-store")
                         .withKeySerde(Serdes.String())
                         .withValueSerde(Serdes.String())
                         .withCachingDisabled()
@@ -130,12 +131,12 @@ public class KafkaModerator {
                         log.trace("Flagged message created: " + processedMessage);
                         return KeyValue.pair(key, ProcessedMessage.serialize(processedMessage));
                     } catch (JsonProcessingException e) {
-                        log.warn("Encountered exception while trying to create new record for '" + flaggedTopic + "': ", e);
+                        log.warn("Encountered exception while trying to create new record for '" + FLAGGED_TOPIC + "': ", e);
                         return null;
                     }
                 })
                 .filter((_, processedMessage) -> processedMessage != null)
-                .to(flaggedTopic);
+                .to(FLAGGED_TOPIC);
 
         return builder.build();
     }
