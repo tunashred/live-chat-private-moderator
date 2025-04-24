@@ -69,12 +69,12 @@ public class PackConsumer implements Runnable {
                     log.trace("Record to be processed: " + record);
                     String topic = record.topic();
                     log.trace("Record consumed from pack " + topic);
-                    if (record.value()) {
-                        packsData.addWord(topic, record.key());
-                        log.trace("New word '" + record.key() + "'" + " from pack topic '" + topic + "'");
-                    } else {
+                    if (record.value() == null) {
                         packsData.removeWord(topic, record.key());
                         log.trace("Removed word '" + record.key() + "'" + " from pack topic '" + topic + "'");
+                    } else {
+                        packsData.addWord(topic, record.key());
+                        log.trace("New word '" + record.key() + "'" + " from pack topic '" + topic + "'");
                     }
                 }
                 consumer.commitSync();
