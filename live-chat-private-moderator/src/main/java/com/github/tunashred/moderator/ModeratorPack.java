@@ -8,7 +8,6 @@ import org.ahocorasick.trie.Trie;
 import java.util.List;
 
 public class ModeratorPack {
-
     static public ProcessedMessage censor(List<WordsTrie> packs, UserMessage userMessage, String channel) {
         String message = userMessage.getMessage();
         StringBuilder censoredMessage = new StringBuilder(message);

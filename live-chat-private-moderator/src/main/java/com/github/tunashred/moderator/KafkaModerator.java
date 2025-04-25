@@ -2,8 +2,9 @@ package com.github.tunashred.moderator;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.github.tunashred.dtos.UserMessage;
+import com.github.tunashred.packs.PackConsumer;
+import com.github.tunashred.packs.PacksData;
 import com.github.tunashred.privatedtos.ProcessedMessage;
-import com.github.tunashred.utils.PreferencesProducer;
 import lombok.AccessLevel;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.log4j.Log4j2;
@@ -39,7 +40,7 @@ public class KafkaModerator {
     public static void main(String[] args) throws RuntimeException, IOException {
         log.info("Loading streams properties");
         Properties streamsProps = new Properties();
-        try (InputStream propsFile = new FileInputStream("src/main/resources/moderator_streams.properties")) {
+        try (InputStream propsFile = new FileInputStream("src/main/resources/moderator/streams.properties")) {
             streamsProps.load(propsFile);
         } catch (IOException e) {
             log.error("Unable to load streams properties", e);
@@ -143,7 +144,7 @@ public class KafkaModerator {
 
     private static List<WordsTrie> getStreamerTries(String streamerID, String preferences) {
         try {
-            List<String> preferencesList = PreferencesProducer.deserializeList(preferences);
+            List<String> preferencesList = PackConsumer.deserializeList(preferences);
             List<WordsTrie> triesList = mapPreferencesToTries(preferencesList);
 
             streamerPacks.put(streamerID, triesList);
