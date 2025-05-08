@@ -20,17 +20,17 @@ import org.apache.kafka.streams.kstream.KStream;
 import org.apache.kafka.streams.kstream.Materialized;
 import org.apache.kafka.streams.state.KeyValueStore;
 
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.github.tunashred.utils.Util.loadProperties;
 
 @Log4j2
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class KafkaModerator {
-    static final String SOURCE_TOPIC = "unsafe_chat";
-    static final String FLAGGED_TOPIC = "flagged_messages";
+    static final String SOURCE_TOPIC = "unsafe-chat";
+    static final String FLAGGED_TOPIC = "flagged-messages";
     static final String PREFERENCES_TOPIC = "streamer-preferences";
 
     static final PacksData loadedPacks = new PacksData();
@@ -39,11 +39,9 @@ public class KafkaModerator {
 
     public static void main(String[] args) throws RuntimeException, IOException {
         log.info("Loading streams properties");
-        Properties streamsProps = new Properties();
-        try (InputStream propsFile = new FileInputStream("src/main/resources/moderator/streams.properties")) {
-            streamsProps.load(propsFile);
-        } catch (IOException e) {
-            log.error("Unable to load streams properties", e);
+        Properties streamsProps = loadProperties(List.of("src/main/resources/moderator/streams.properties", "src/main/resources/security/security.properties"));
+        if (streamsProps == null || streamsProps.isEmpty()) {
+            log.error("Unable to load streams properties");
             return;
         }
 
