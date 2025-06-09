@@ -29,6 +29,7 @@
         <jackson.version>2.16.1</jackson.version>
         <org.apache.logging.log4j.version>2.24.3</org.apache.logging.log4j.version>
         <junit.version>5.9.2</junit.version>
+        <prometheus.version>1.12.3</prometheus.version>
     </properties>
 
     <dependencies>
@@ -158,6 +159,18 @@
             <version>${junit.version}</version>
             <scope>test</scope>
             <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter-engine -->
+        </dependency>
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>${prometheus.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <version>${prometheus.version}</version>
         </dependency>
     </dependencies>
 

@@ -5,6 +5,7 @@ import com.github.tunashred.dtos.UserMessage;
 import com.github.tunashred.packs.PackConsumer;
 import com.github.tunashred.packs.PacksData;
 import com.github.tunashred.privatedtos.ProcessedMessage;
+import io.micrometer.core.instrument.Timer;
 import lombok.AccessLevel;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.log4j.Log4j2;
@@ -24,6 +25,8 @@ import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.github.tunashred.moderator.MetricsCollector.meterRegistry;
+import static com.github.tunashred.moderator.MetricsCollector.processingErrorsCounter;
 import static com.github.tunashred.utils.Util.loadProperties;
 
 @Log4j2
@@ -36,6 +39,8 @@ public class KafkaModerator {
     static final PacksData loadedPacks = new PacksData();
     static PackConsumer packConsumer;
     static Map<String, List<WordsTrie>> streamerPacks = new HashMap<>();
+
+    static MetricsCollector metricsCollector = null;
 
     public static void main(String[] args) throws RuntimeException, IOException {
         log.info("Loading streams properties");
@@ -65,6 +70,7 @@ public class KafkaModerator {
             }
         }));
         streams.start();
+        metricsCollector = new MetricsCollector();
     }
 
     // TODO: maybe for future there will be multiple flagged messages topics?
@@ -89,7 +95,8 @@ public class KafkaModerator {
                 streamerPackPreferences,
                 (key, _) -> key,
                 (wrappedMessage, serializedPreferencesList) -> {
-                    log.trace("Received message to process: " + wrappedMessage);
+                    log.trace("Received message to process: " + wrappedMessage + " from partition " + Thread.currentThread().getName());
+                    Timer.Sample sample = Timer.start(meterRegistry);
                     String streamerID = wrappedMessage.getKey();
                     UserMessage userMessage;
 
@@ -98,12 +105,18 @@ public class KafkaModerator {
                         log.trace("Message deserialized");
                     } catch (JsonProcessingException e) {
                         log.warn("Encountered exception while trying to deserialize record: ", e);
+                        sample.stop(MetricsCollector.messageProcessingTimer);
+                        processingErrorsCounter.increment();
                         return null;
                     }
 
                     List<WordsTrie> streamerTries = getStreamerTries(streamerID, serializedPreferencesList);
 
-                    return ModeratorPack.censor(streamerTries, userMessage, streamerID);
+                    ProcessedMessage processedMessage = ModeratorPack.censor(streamerTries, userMessage, streamerID);
+
+                    MetricsCollector.updateMetrics(userMessage.getUsername(), processedMessage.getChannelName(), processedMessage);
+                    sample.stop(MetricsCollector.messageProcessingTimer);
+                    return processedMessage;
                 }
         );
 
