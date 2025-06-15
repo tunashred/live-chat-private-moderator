@@ -114,7 +114,7 @@ public class KafkaModerator {
 
                     ProcessedMessage processedMessage = ModeratorPack.censor(streamerTries, userMessage, streamerID);
 
-                    MetricsCollector.updateMetrics(userMessage.getUsername(), processedMessage.getChannelName(), processedMessage);
+                    MetricsCollector.recordMessage(processedMessage.getChannelName(), userMessage.getUsername(), processedMessage.getIsModerated());
                     sample.stop(MetricsCollector.messageProcessingTimer);
                     return processedMessage;
                 }

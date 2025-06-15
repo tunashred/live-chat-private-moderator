@@ -95,7 +95,7 @@ Configuration:
 
     Logger:
       - name: com.github.tunashred.moderator
-        level: "trace"
+        level: "info"
 
       - name: com.github.tunashred.utils
         level: "info"
